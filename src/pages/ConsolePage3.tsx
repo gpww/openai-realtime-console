@@ -20,7 +20,7 @@ import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
 
-import { X, Edit, Zap, ArrowUp, ArrowDown,Phone } from 'react-feather';
+import { X, Edit, Zap, ArrowUp, ArrowDown } from 'react-feather';
 import { Button } from '../components/button/Button';
 import { Toggle } from '../components/toggle/Toggle';
 
@@ -82,9 +82,11 @@ export function ConsolePage() {
    */
   const [items, setItems] = useState<ItemType[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [isBotSpeaking, setIsBotSpeaking] = useState(false);
-  // const isBotSpeaking = useRef(true);
 
+  const [canPushToTalk, setCanPushToTalk] = useState(true);
+  const canPushToTalkRef = useRef(true);
+
+  const [isRecording, setIsRecording] = useState(false);
   /**
    * Utility for formatting the timing of logs
    */
@@ -141,11 +143,7 @@ export function ConsolePage() {
     // Connect to realtime API
     await client.connect();
 
-    client.updateSession(
-      {
-        instructions:'bot_name=奇奇,user_name=轩轩,user_age=11,user_gender=男', 
-        turn_detection: { type: 'server_vad' } 
-      });
+    client.updateSession({instructions:'bot_name=奇奇,user_name=轩轩,user_age=11,user_gender=男'});
 
     client.sendUserMessageContent([
       {
@@ -155,13 +153,16 @@ export function ConsolePage() {
       },
     ]);
 
-    await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+    if (client.getTurnDetectionType() === 'server_vad') {
+      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+    }
   }, []);
 
   /**
    * Disconnect and reset conversation state
    */
   const disconnectConversation = useCallback(async () => {
+    if(canPushToTalk) changeTurnEndType('none');
 
     setIsConnected(false);
     setItems([]);
@@ -180,6 +181,53 @@ export function ConsolePage() {
     const client = clientRef.current;
     client.deleteItem(id);
   }, []);
+
+  /**
+   * In push-to-talk mode, start recording
+   * .appendInputAudio() for each sample
+   */
+  const startRecording = async () => {
+    setIsRecording(true);
+    const client = clientRef.current;
+    const wavRecorder = wavRecorderRef.current;
+    const wavStreamPlayer = wavStreamPlayerRef.current;
+    const trackSampleOffset = await wavStreamPlayer.interrupt();
+    if (trackSampleOffset?.trackId) {
+      const { trackId, offset } = trackSampleOffset;
+      await client.cancelResponse(trackId, offset);
+    }
+    await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+  };
+
+  /**
+   * In push-to-talk mode, stop recording
+   */
+  const stopRecording = async () => {
+    setIsRecording(false);
+    const client = clientRef.current;
+    const wavRecorder = wavRecorderRef.current;
+    if( wavRecorder.getStatus() === 'recording')
+      await wavRecorder.pause();
+    client.createResponse();
+};
+
+  /**
+   * Switch between Manual <> VAD mode for communication
+   */
+  const changeTurnEndType = async (value: string) => {
+    const client = clientRef.current;
+    const wavRecorder = wavRecorderRef.current;
+    if (value === 'none' && wavRecorder.getStatus() === 'recording') {
+      await wavRecorder.pause();
+    }
+    client.updateSession({
+      turn_detection: value === 'none' ? null : { type: 'server_vad' },
+    });
+    if (value === 'server_vad' && client.isConnected()) {
+      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+    }
+    setCanPushToTalk(value === 'none');
+  };
 
   /**
    * Auto-scroll the conversation logs
@@ -264,19 +312,6 @@ export function ConsolePage() {
     };
   }, []);
 
-    /**
-     * 在播报中，用户点击中断按钮，停止播放并取消请求
-   */
-    const interrupt = async () => {
-      const client = clientRef.current;
-      const wavStreamPlayer = wavStreamPlayerRef.current;
-      const trackSampleOffset = await wavStreamPlayer.interrupt();
-      if (trackSampleOffset?.trackId) {
-        const { trackId, offset } = trackSampleOffset;
-        await client.cancelResponse(trackId, offset);
-      }
-    };
-
   /**
    * Core RealtimeClient and audio capture setup
    * Set all of our instructions, tools, events and more
@@ -286,9 +321,8 @@ export function ConsolePage() {
     const wavStreamPlayer = wavStreamPlayerRef.current;
     wavStreamPlayer.onplay = async () => {
       // console.log('开始播放');
+      if(!canPushToTalkRef.current)
       {
-        await wavStreamPlayer.interrupt();//播放前先停止之前的播放
-        setIsBotSpeaking(true);
         const wavRecorder = wavRecorderRef.current;
         if( wavRecorder.getStatus() === 'recording')
           await wavRecorder.pause();
@@ -296,8 +330,8 @@ export function ConsolePage() {
     };
     wavStreamPlayer.onended = async () => {
       // console.log('播放结束');
+      if(!canPushToTalkRef.current)
       {
-        setIsBotSpeaking(false);
         const client = clientRef.current;
         const wavRecorder = wavRecorderRef.current;
         if(!wavRecorder.recording)
@@ -346,9 +380,8 @@ export function ConsolePage() {
     <div data-component="ConsolePage">
       <div className="content-top">
         <div className="content-title">
-          {/* <img src="/openai-logomark.svg" alt="OpenAI Logo" /> */}
-          <img src="/xstarcity4.png" alt="xStar Logo" />
-          <span>实时语音</span>
+          <img src="/openai-logomark.svg" alt="OpenAI Logo" />
+          <span>realtime console</span>
         </div>
         <div className="content-api-key">
           {(
@@ -373,7 +406,7 @@ export function ConsolePage() {
                 <canvas ref={serverCanvasRef} />
               </div>
             </div>
-            {/* <div className="content-block-title">conversation</div> */}
+            <div className="content-block-title">conversation</div>
             <div className="content-block-body" data-conversation-content>
               {!items.length && `awaiting connection...`}
               {items.map((conversationItem, i) => {
@@ -431,21 +464,34 @@ export function ConsolePage() {
             </div>
           </div>
           <div className="content-actions">
+            <Toggle
+              // defaultValue={false}
+              labels={['M', 'A']}
+              values={['none', 'server_vad']}
+              // defaultValue={vadToggleValue} // 绑定状态
+              onChange={(_, value) => changeTurnEndType(value)}
+            />
             <div className="spacer" />
-            {isConnected && isBotSpeaking && (
-                <Button
-                  label='打断'
-                  buttonStyle='regular'
-                  disabled={!isConnected || !isBotSpeaking}
-                  onClick={interrupt}
-                />
+            {isConnected && canPushToTalk && (
+              <Button
+                label={isRecording ? '发送' : '按住'}
+                buttonStyle={isRecording ? 'alert' : 'regular'}
+                disabled={!isConnected || !canPushToTalk}
+                onMouseDown={startRecording}
+                onMouseUp={stopRecording}
+                onMouseLeave={(event) => {
+                  if (event.buttons === 1) {
+                    stopRecording();// 如果鼠标左键被按下，则停止录音
+                  }
+                }}
+              />
             )}
             <div className="spacer" />
             <Button
-              label={isConnected ? '挂断' : '通话'}
-              iconPosition={'start'}
-              icon={isConnected ? Phone : Zap}
-              buttonStyle={isConnected ? 'alert' : 'regular'}
+              label={isConnected ? '断' : '连'}
+              iconPosition={isConnected ? 'end' : 'start'}
+              icon={isConnected ? X : Zap}
+              buttonStyle={isConnected ? 'regular' : 'action'}
               onClick={
                 isConnected ? disconnectConversation : connectConversation
               }

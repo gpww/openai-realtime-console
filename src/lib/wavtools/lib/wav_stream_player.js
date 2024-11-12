@@ -68,12 +68,29 @@ export class WavStreamPlayer {
     );
   }
 
+
+  /**
+   * 开始播放事件
+   * @type {Function}
+   */
+  onplay = null;
+
+  /**
+   * 结束播放事件
+   * @type {Function}
+   */
+  onended = null;
+
+
   /**
    * Starts audio streaming
    * @private
    * @returns {Promise<true>}
    */
   _start() {
+    if (this.onplay) {
+      this.onplay();
+    }
     const streamNode = new AudioWorkletNode(this.context, 'stream_processor');
     streamNode.connect(this.context.destination);
     streamNode.port.onmessage = (e) => {
@@ -81,6 +98,9 @@ export class WavStreamPlayer {
       if (event === 'stop') {
         streamNode.disconnect();
         this.stream = null;
+        if (this.onended) {
+          this.onended();
+        }
       } else if (event === 'offset') {
         const { requestId, trackId, offset } = e.data;
         const currentTime = offset / this.sampleRate;

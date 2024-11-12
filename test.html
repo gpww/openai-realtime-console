@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>WebSocket Client Test</title>
+    </head>
+    <body>
+        <h1>WebSocket Client Test</h1>
+        <script>
+        function connectWebSocket(url, apiKey, model) {
+            return new Promise((resolve, reject) => {
+                const ws = new WebSocket(`${url}${model ? `?model=${model}` : ''}`, [
+                    'realtime',
+                    `openai-insecure-api-key.${apiKey}`,
+                    'openai-beta.realtime-v1', 
+                ]);
+
+                ws.addEventListener('open', () => {
+                    console.log(`Connected to "${url}"`);
+                    resolve(ws);
+                });
+
+                ws.addEventListener('error', (error) => {
+                    console.error("WebSocket error: ", error);
+                    reject(new Error(`Could not connect to "${url}"`));
+                });
+
+                ws.addEventListener('close', () => {
+                    console.log(`Disconnected from "${url}"`);
+                });
+            });
+        }
+
+        const url = "wss://api.xstar.city/v1/realtime/"; // 替换为您的WebSocket服务器地址
+        const apiKey = ""; // 如果需要API key，可以在这里设置
+        const model = "gpt-4o-realtime-preview-2024-10-01";
+
+        console.log("Attempting to connect to WebSocket...");
+
+        connectWebSocket(url, apiKey, model)
+            .then(ws => {
+                console.log("WebSocket connection established.");
+                // 在这里可以发送消息或执行其他操作
+            })
+            .catch(error => {
+                console.error("Failed to connect to WebSocket:", error);
+            });
+    </script>
+    </body>
+</html>

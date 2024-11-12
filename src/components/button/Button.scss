@@ -8,8 +8,8 @@
   font-weight: 400;
   font-style: normal;
   border: none;
-  background-color: #ececf1;
-  color: #101010;
+  background-color: #101010;
+  color: #ececf1;
   border-radius: 1000px;
   padding: 8px 24px;
   min-height: 42px;
@@ -19,6 +19,7 @@
   &.button-style-action {
     background-color: #101010;
     color: #ececf1;
+
     &:hover:not([disabled]) {
       background-color: #404040;
     }
@@ -27,8 +28,9 @@
   &.button-style-alert {
     background-color: #f00;
     color: #ececf1;
+
     &:hover:not([disabled]) {
-      background-color: #f00;
+      background-color: rgb(249, 249, 8);
     }
   }
 
@@ -46,6 +48,7 @@
 
   &:hover:not([disabled]) {
     background-color: #d8d8d8;
+    color: #101010
   }
 
   &:active:not([disabled]) {
@@ -54,12 +57,15 @@
 
   .icon {
     display: flex;
+
     &.icon-start {
       margin-left: -8px;
     }
+
     &.icon-end {
       margin-right: -8px;
     }
+
     svg {
       width: 16px;
       height: 16px;
@@ -69,12 +75,15 @@
   &.icon-red .icon {
     color: #cc0000;
   }
+
   &.icon-green .icon {
     color: #009900;
   }
+
   &.icon-grey .icon {
     color: #909090;
   }
+
   &.icon-fill {
     svg {
       fill: currentColor;

@@ -73,6 +73,7 @@ export class RealtimeRelay {
       return;
     }
     this.log(`Connected to OpenAI successfully!`);
+    
     while (messageQueue.length) {
       messageHandler(messageQueue.shift());
     }
