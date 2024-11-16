@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Mp3 Test</title>
+    </head>
+    <body>
+        <h1>Mp3 Test</h1>
+        <button id="playButton">播放音频</button>
+        <script type="module">
+        import { WavStreamPlayer } from '/src/lib/wavtools/index.js';
+
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+        const wavStreamPlayer = new WavStreamPlayer({ sampleRate: 24000 });
+
+        document.getElementById('playButton').addEventListener('click', async () => {
+            // Connect to audio output
+            await wavStreamPlayer.connect();
+
+            // 确保 AudioContext 处于运行状态
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
+            // 获取 MP3 文件并解码
+            fetch('test.mp3')
+                .then(response => response.arrayBuffer())
+                .then(arrayBuffer => {
+                    const int16Array = new Int16Array(arrayBuffer);
+                    return wavStreamPlayer.addMp3(int16Array, 'my-track');
+                })
+                .catch(error => console.error('Error decoding audio data:', error));
+        });
+    </script>
+    </body>
+</html>

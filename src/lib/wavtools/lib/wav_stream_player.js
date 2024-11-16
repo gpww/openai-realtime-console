@@ -26,7 +26,7 @@ export class WavStreamPlayer {
    * @returns {Promise<true>}
    */
   async connect() {
-    this.context = new AudioContext({ sampleRate: this.sampleRate });
+    this.context = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: this.sampleRate });
     if (this.context.state === 'suspended') {
       await this.context.resume();
     }
@@ -134,11 +134,41 @@ export class WavStreamPlayer {
       buffer = arrayBuffer;
     } else if (arrayBuffer instanceof ArrayBuffer) {
       buffer = new Int16Array(arrayBuffer);
+    } else if (arrayBuffer instanceof AudioBuffer) {
+      const channelData = arrayBuffer.getChannelData(0);
+      buffer = new Int16Array(channelData.length);
+      for (let i = 0; i < channelData.length; i++) {
+        buffer[i] = channelData[i] * 0x7FFF; // Convert float to PCM16
+      }
     } else {
       throw new Error(`argument must be Int16Array or ArrayBuffer`);
     }
     this.stream.port.postMessage({ event: 'write', buffer, trackId });
     return buffer;
+  }
+
+  /**
+   * Adds MP3 data to the currently playing audio stream
+   * @param {ArrayBuffer|Int16Array} arrayBuffer
+   * @param {string} [trackId]
+   * @returns {Int16Array}
+   */
+  addMp3(arrayBuffer, trackId = 'default') {
+    let buffer;
+    if (arrayBuffer instanceof Int16Array) {
+      buffer = arrayBuffer;
+    } else if (arrayBuffer instanceof ArrayBuffer) {
+      buffer = new Int16Array(arrayBuffer);
+    } else {
+      throw new Error('mp3Data must be an Int16Array or ArrayBuffer');
+    }
+    return this.context.decodeAudioData(buffer.buffer)
+      .then((audioBuffer) => {
+        return this.add16BitPCM(audioBuffer, trackId);
+      })
+      .catch((error) => {
+        throw new Error('Failed to decode mp3Data: ' + error.message);
+      });
   }
 
   /**

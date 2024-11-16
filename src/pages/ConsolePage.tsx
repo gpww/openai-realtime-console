@@ -21,6 +21,7 @@ import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
 
 import { X, Edit, Zap, ArrowUp, ArrowDown,Phone } from 'react-feather';
+import { FaMicrophone, FaMicrophoneSlash} from 'react-icons/fa';
 import { Button } from '../components/button/Button';
 import { Toggle } from '../components/toggle/Toggle';
 
@@ -48,10 +49,10 @@ export function ConsolePage() {
    * - RealtimeClient (API client)
    */
   const wavRecorderRef = useRef<WavRecorder>(
-    new WavRecorder({ sampleRate: 16000 })
+    new WavRecorder({ sampleRate: 8000 })
   );
   const wavStreamPlayerRef = useRef<WavStreamPlayer>(
-    new WavStreamPlayer({ sampleRate: 44100 })
+    new WavStreamPlayer({ sampleRate: 24000 })
   );
   const clientRef = useRef<RealtimeClient>(
     new RealtimeClient(
@@ -83,7 +84,14 @@ export function ConsolePage() {
   const [items, setItems] = useState<ItemType[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isBotSpeaking, setIsBotSpeaking] = useState(false);
-  // const isBotSpeaking = useRef(true);
+  // const isBotSpeaking = useRef(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(isMuted);
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
 
   /**
    * Utility for formatting the timing of logs
@@ -123,6 +131,7 @@ export function ConsolePage() {
    * WavRecorder taks speech input, WavStreamPlayer output, client is API client
    */
   const connectConversation = useCallback(async () => {
+    setIsConnecting(true);
     const client = clientRef.current;
     const wavRecorder = wavRecorderRef.current;
     const wavStreamPlayer = wavStreamPlayerRef.current;
@@ -131,12 +140,6 @@ export function ConsolePage() {
     startTimeRef.current = new Date().toISOString();
     setIsConnected(true);
     setItems(client.conversation.getItems());
-
-    // Connect to microphone
-    await wavRecorder.begin();
-
-    // Connect to audio output
-    await wavStreamPlayer.connect();
 
     // Connect to realtime API
     await client.connect();
@@ -155,14 +158,22 @@ export function ConsolePage() {
       },
     ]);
 
-    await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+    // Connect to microphone
+    await wavRecorder.begin();
+
+    // Connect to audio output
+    await wavStreamPlayer.connect();
+
+    if(!isMutedRef.current)
+      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+
   }, []);
 
   /**
    * Disconnect and reset conversation state
    */
   const disconnectConversation = useCallback(async () => {
-
+    setIsConnecting(false);
     setIsConnected(false);
     setItems([]);
 
@@ -174,6 +185,22 @@ export function ConsolePage() {
 
     const wavStreamPlayer = wavStreamPlayerRef.current;
     await wavStreamPlayer.interrupt();
+    setIsMuted(false);//取消静音
+  }, []);
+
+  const toggleMute = useCallback(async () => {
+    if(!isMutedRef.current){
+      const wavRecorder = wavRecorderRef.current;
+      if(wavRecorder.recording)
+        await wavRecorder.pause();
+    }
+    else{
+      const client = clientRef.current;
+      const wavRecorder = wavRecorderRef.current;
+      if(!wavRecorder.recording)
+        await wavRecorder.record((data) => client.appendInputAudio(data.mono))
+    }
+    setIsMuted(!isMutedRef.current); // 更新状态
   }, []);
 
   const deleteConversationItem = useCallback(async (id: string) => {
@@ -287,21 +314,26 @@ export function ConsolePage() {
     wavStreamPlayer.onplay = async () => {
       // console.log('开始播放');
       {
+        setIsConnecting(false);
         await wavStreamPlayer.interrupt();//播放前先停止之前的播放
+        // isBotSpeaking.current = true;
         setIsBotSpeaking(true);
         const wavRecorder = wavRecorderRef.current;
-        if( wavRecorder.getStatus() === 'recording')
+        if(wavRecorder.recording)
           await wavRecorder.pause();
       }
     };
     wavStreamPlayer.onended = async () => {
       // console.log('播放结束');
       {
+        // isBotSpeaking.current = false;
         setIsBotSpeaking(false);
-        const client = clientRef.current;
-        const wavRecorder = wavRecorderRef.current;
-        if(!wavRecorder.recording)
-          await wavRecorder.record((data) => client.appendInputAudio(data.mono))
+        if(!isMutedRef.current){
+          const client = clientRef.current;
+          const wavRecorder = wavRecorderRef.current;
+          if(!wavRecorder.recording)
+            await wavRecorder.record((data) => client.appendInputAudio(data.mono))
+        }
       }
     };
     const client = clientRef.current;
@@ -317,16 +349,11 @@ export function ConsolePage() {
     client.on('conversation.updated', async ({ item, delta }: any) => {
       const items = client.conversation.getItems();
       if (delta?.audio) {
-        wavStreamPlayer.add16BitPCM(delta.audio, item.id);
+        wavStreamPlayer.addMp3(delta.audio, item.id);
       }
       if (item.status === 'completed' && item.formatted.audio?.length) {
-        var sampleRate = item.role === 'user' ? 16000 : 44100;
-        const wavFile = await WavRecorder.decode(
-          item.formatted.audio,
-          sampleRate,
-          sampleRate
-        );
-        item.formatted.file = wavFile;
+        const mp3File = new Blob([item.formatted.audio], { type: 'audio/mp3' });
+        item.formatted.file = URL.createObjectURL(mp3File);
       }
       setItems(items);
     });
@@ -348,7 +375,7 @@ export function ConsolePage() {
         <div className="content-title">
           {/* <img src="/openai-logomark.svg" alt="OpenAI Logo" /> */}
           <img src="/xstarcity4.png" alt="xStar Logo" />
-          <span>实时语音</span>
+          {/* <span>实时语音</span> */}
         </div>
         <div className="content-api-key">
           {(
@@ -363,6 +390,11 @@ export function ConsolePage() {
         </div>
       </div>
       <div className="content-main">
+        {isConnecting && (
+          <div className="loading-overlay">
+            <div className="spinner"></div>
+          </div>
+        )}
         <div className="content-logs">
           <div className="content-block conversation">
             <div className="visualization">
@@ -420,7 +452,7 @@ export function ConsolePage() {
                         )}
                       {conversationItem.formatted.file && (
                         <audio
-                          src={conversationItem.formatted.file.url}
+                          src={conversationItem.formatted.file}
                           controls
                         />
                       )}
@@ -431,12 +463,18 @@ export function ConsolePage() {
             </div>
           </div>
           <div className="content-actions">
+            {isConnected && (
+              <Button
+                icon={isMuted ? FaMicrophoneSlash : FaMicrophone }
+                buttonStyle='regular'
+                onClick= {toggleMute}
+              />
+            )}
             <div className="spacer" />
             {isConnected && isBotSpeaking && (
                 <Button
                   label='打断'
                   buttonStyle='regular'
-                  disabled={!isConnected || !isBotSpeaking}
                   onClick={interrupt}
                 />
             )}

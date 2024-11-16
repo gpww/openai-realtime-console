@@ -13,7 +13,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function Button({
-  label = 'Okay',
+  label = '',
   icon = void 0,
   iconPosition = 'start',
   iconColor = void 0,
@@ -39,7 +39,7 @@ export function Button({
           <StartIcon />
         </span>
       )}
-      <span className="label">{label}</span>
+      {label && <span className="label">{label}</span>}
       {EndIcon && (
         <span className="icon icon-end">
           <EndIcon />
