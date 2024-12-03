@@ -1,0 +1,3 @@
+[submodule "external-packages/realtime-api-beta"]
+	path = external-packages/realtime-api-beta
+	url = https://github.com/gpww/openai-realtime-api-beta
