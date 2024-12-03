@@ -26,7 +26,8 @@ export class WavStreamPlayer {
    * @returns {Promise<true>}
    */
   async connect() {
-    this.context = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: this.sampleRate });
+    // this.context = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: this.sampleRate });
+    this.context = new AudioContext({ sampleRate: this.sampleRate });
     if (this.context.state === 'suspended') {
       await this.context.resume();
     }
@@ -162,13 +163,14 @@ export class WavStreamPlayer {
     } else {
       throw new Error('mp3Data must be an Int16Array or ArrayBuffer');
     }
-    return this.context.decodeAudioData(buffer.buffer)
-      .then((audioBuffer) => {
-        return this.add16BitPCM(audioBuffer, trackId);
-      })
-      .catch((error) => {
-        throw new Error('Failed to decode mp3Data: ' + error.message);
-      });
+    let audioBuffer;
+    this.context.decodeAudioData(buffer.buffer, (decodedData) => {
+      audioBuffer = decodedData;
+    });
+    if (!audioBuffer) {
+      throw new Error('Failed to decode mp3Data');
+    }
+    return this.add16BitPCM(audioBuffer, trackId);
   }
 
   /**

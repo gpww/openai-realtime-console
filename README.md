@@ -24,121 +24,50 @@ Start your server with:
 $ npm start
 ```
 
-It should be available via `localhost:3000`.
+将 .env.example 改成 .env，并填入REACT_APP_OPENAI_API_KEY
 
-# Table of contents
+这个key可通过https://www.xstar.city/rag/ 申请
 
-1. [Using the console](#using-the-console)
-   1. [Using a relay server](#using-a-relay-server)
-1. [Realtime API reference client](#realtime-api-reference-client)
-   1. [Sending streaming audio](#sending-streaming-audio)
-   1. [Adding and using tools](#adding-and-using-tools)
-   1. [Interrupting the model](#interrupting-the-model)
-   1. [Reference client events](#reference-client-events)
-1. [Wavtools](#wavtools)
-   1. [WavRecorder quickstart](#wavrecorder-quickstart)
-   1. [WavStreamPlayer quickstart](#wavstreamplayer-quickstart)
-1. [Acknowledgements and contact](#acknowledgements-and-contact)
+It should be available via `localhost:4001`.
 
 # Using the console
 
-The console requires an OpenAI API key (**user key** or **project key**) that has access to the
-Realtime API. You'll be prompted on startup to enter it. It will be saved via `localStorage` and can be
-changed at any time from the UI.
-
-To start a session you'll need to **connect**. This will require microphone access.
-You can then choose between **manual** (Push-to-talk) and **vad** (Voice Activity Detection)
-conversation modes, and switch between them at any time.
-
-There are two functions enabled;
-
-- `get_weather`: Ask for the weather anywhere and the model will do its best to pinpoint the
-  location, show it on a map, and get the weather for that location. Note that it doesn't
-  have location access, and coordinates are "guessed" from the model's training data so
-  accuracy might not be perfect.
-- `set_memory`: You can ask the model to remember information for you, and it will store it in
-  a JSON blob on the left.
-
-You can freely interrupt the model at any time in push-to-talk or VAD mode.
-
-## Using a relay server
-
-If you would like to build a more robust implementation and play around with the reference
-client using your own server, we have included a Node.js [Relay Server](/relay-server/index.js).
-
-```shell
-$ npm run relay
-```
-
-It will start automatically on `localhost:8081`.
-
-**You will need to create a `.env` file** with the following configuration:
-
-```conf
-OPENAI_API_KEY=YOUR_API_KEY
-REACT_APP_LOCAL_RELAY_SERVER_URL=http://localhost:8081
-```
-
-You will need to restart both your React app and relay server for the `.env.` changes
-to take effect. The local server URL is loaded via [`ConsolePage.tsx`](/src/pages/ConsolePage.tsx).
-To stop using the relay server at any time, simply delete the environment
-variable or set it to empty string.
-
 ```javascript
-/**
- * Running a local relay server will allow you to hide your API key
- * and run custom logic on the server
- *
- * Set the local relay server address to:
- * REACT_APP_LOCAL_RELAY_SERVER_URL=http://localhost:8081
- *
- * This will also require you to set OPENAI_API_KEY= in a `.env` file
- * You can run it with `npm run relay`, in parallel with `npm start`
- */
-const LOCAL_RELAY_SERVER_URL: string =
-  process.env.REACT_APP_LOCAL_RELAY_SERVER_URL || '';
-```
 
-This server is **only a simple message relay**, but it can be extended to:
+import { RealtimeClient } from 'realtime-api-beta-local';
+//这里已将https://github.com/openai/openai-realtime-api-beta库克隆到本仓库通过源码引用——主要是允许模型和音色的自由修改
 
-- Hide API credentials if you would like to ship an app to play with online
-- Handle certain calls you would like to keep secret (e.g. `instructions`) on
-  the server directly
-- Restrict what types of events the client can receive and send
+const clientRef = useRef<RealtimeClient>(
+	new RealtimeClient(
+	  {
+		apiKey: apiKey,
+		url: REACT_APP_SERVER_URL,
+		dangerouslyAllowAPIKeyInBrowser: true,
+	  }
+	)
+);
 
-You will have to implement these features yourself.
+const client = clientRef.current;
 
-# Realtime API reference client
+// Connect to realtime API
+await client.connect({ model: "qwen-max@DashScope" });//完整模型列表通过 https://api.xstar.city/v1/models 查看
 
-The latest reference client and documentation are available on GitHub at
-[openai/openai-realtime-api-beta](https://github.com/openai/openai-realtime-api-beta).
+client.updateSession(
+  {
+	instructions:'bot_name=奇奇,user_name=轩轩,user_age=11,user_gender=男', //这种方式激活内置agent，可定义用户参数
+	// instructions: instructions, //自定义系统提示词
+	turn_detection: { type: 'server_vad' },
+	voice: '晓辰'// https://api.xstar.city/v1/realtime/voiceList 查看完整音色列表
+  });
 
-You can use this client yourself in any React (front-end) or Node.js project.
-For full documentation, refer to the GitHub repository, but you can use the
-guide here as a primer to get started.
+client.sendUserMessageContent([
+  {
+	type: `input_text`,
+	text: `你好`,//发送文本消息
+	// text: `For testing purposes, I want you to list ten car brands. Number each item, e.g. "one (or whatever number you are one): the item name".`
+  },
+]);
 
-```javascript
-import { RealtimeClient } from '/src/lib/realtime-api-beta/index.js';
-
-const client = new RealtimeClient({ apiKey: process.env.OPENAI_API_KEY });
-
-// Can set parameters ahead of connecting
-client.updateSession({ instructions: 'You are a great, upbeat friend.' });
-client.updateSession({ voice: 'alloy' });
-client.updateSession({ turn_detection: 'server_vad' });
-client.updateSession({ input_audio_transcription: { model: 'whisper-1' } });
-
-// Set up event handling
-client.on('conversation.updated', ({ item, delta }) => {
-  const items = client.conversation.getItems(); // can use this to render all items
-  /* includes all changes to conversations, delta may be populated */
-});
-
-// Connect to Realtime API
-await client.connect();
-
-// Send an item and triggers a generation
-client.sendUserMessageContent([{ type: 'text', text: `How are you?` }]);
 ```
 
 ## Sending streaming audio
@@ -160,48 +89,6 @@ for (let i = 0; i < 10; i++) {
 }
 // Pending audio is committed and model is asked to generate
 client.createResponse();
-```
-
-## Adding and using tools
-
-Working with tools is easy. Just call `.addTool()` and set a callback as the second parameter.
-The callback will be executed with the parameters for the tool, and the result will be automatically
-sent back to the model.
-
-```javascript
-// We can add tools as well, with callbacks specified
-client.addTool(
-  {
-    name: 'get_weather',
-    description:
-      'Retrieves the weather for a given lat, lng coordinate pair. Specify a label for the location.',
-    parameters: {
-      type: 'object',
-      properties: {
-        lat: {
-          type: 'number',
-          description: 'Latitude',
-        },
-        lng: {
-          type: 'number',
-          description: 'Longitude',
-        },
-        location: {
-          type: 'string',
-          description: 'Name of the location',
-        },
-      },
-      required: ['lat', 'lng', 'location'],
-    },
-  },
-  async ({ lat, lng, location }) => {
-    const result = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,wind_speed_10m`
-    );
-    const json = await result.json();
-    return json;
-  }
-);
 ```
 
 ## Interrupting the model
@@ -350,23 +237,3 @@ trackOffset.trackId; // "my-track"
 trackOffset.offset; // sample number
 trackOffset.currentTime; // time in track
 ```
-
-# Acknowledgements and contact
-
-Thanks for checking out the Realtime Console. We hope you have fun with the Realtime API.
-Special thanks to the whole Realtime API team for making this possible. Please feel free
-to reach out, ask questions, or give feedback by creating an issue on the repository.
-You can also reach out and let us know what you think directly!
-
-- OpenAI Developers / [@OpenAIDevs](https://x.com/OpenAIDevs)
-- Jordan Sitkin / API / [@dustmason](https://x.com/dustmason)
-- Mark Hudnall / API / [@landakram](https://x.com/landakram)
-- Peter Bakkum / API / [@pbbakkum](https://x.com/pbbakkum)
-- Atty Eleti / API / [@athyuttamre](https://x.com/athyuttamre)
-- Jason Clark / API / [@onebitToo](https://x.com/onebitToo)
-- Karolis Kosas / Design / [@karoliskosas](https://x.com/karoliskosas)
-- Keith Horwood / API + DX / [@keithwhor](https://x.com/keithwhor)
-- Romain Huet / DX / [@romainhuet](https://x.com/romainhuet)
-- Katia Gil Guzman / DX / [@kagigz](https://x.com/kagigz)
-- Ilan Bigio / DX / [@ilanbigio](https://x.com/ilanbigio)
-- Kevin Whinnery / DX / [@kevinwhinnery](https://x.com/kevinwhinnery)

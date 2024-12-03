@@ -14,8 +14,8 @@ const OPENAI_API_KEY: string = process.env.REACT_APP_OPENAI_API_KEY || '';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 
-import { RealtimeClient } from '@openai/realtime-api-beta';
-import { ItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
+import { RealtimeClient } from 'realtime-api-beta-local';
+import { ItemType } from 'realtime-api-beta-local/dist/lib/client.js';
 import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';

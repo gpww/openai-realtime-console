@@ -8,14 +8,14 @@
  * This will also require you to set OPENAI_API_KEY= in a `.env` file
  * You can run it with `npm run relay`, in parallel with `npm start`
  */
-const LOCAL_RELAY_SERVER_URL: string =
-  process.env.REACT_APP_LOCAL_RELAY_SERVER_URL || '';
+const REACT_APP_SERVER_URL: string =
+  process.env.REACT_APP_SERVER_URL || '';
 const OPENAI_API_KEY: string = process.env.REACT_APP_OPENAI_API_KEY || '';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 
-import { RealtimeClient } from '@openai/realtime-api-beta';
-import { ItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
+import { RealtimeClient } from 'realtime-api-beta-local';
+import { ItemType } from 'realtime-api-beta-local/dist/lib/client.js';
 import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
@@ -23,17 +23,15 @@ import { WavRenderer } from '../utils/wav_renderer';
 import { X, Edit, Zap, ArrowUp, ArrowDown,Phone } from 'react-feather';
 import { FaMicrophone, FaMicrophoneSlash} from 'react-icons/fa';
 import { Button } from '../components/button/Button';
-import { Toggle } from '../components/toggle/Toggle';
 
 import './ConsolePage.scss';
-import { isJsxOpeningLikeElement } from 'typescript';
 
 export function ConsolePage() {
   /**
    * Ask user for API Key
    * If we're using the local relay server, we don't need this
    */
-  const apiKey = LOCAL_RELAY_SERVER_URL
+  const apiKey = REACT_APP_SERVER_URL
     ? OPENAI_API_KEY
     : localStorage.getItem('tmp::voice_api_key') ||
       prompt('OpenAI API Key') ||
@@ -52,13 +50,13 @@ export function ConsolePage() {
     new WavRecorder({ sampleRate: 8000 })
   );
   const wavStreamPlayerRef = useRef<WavStreamPlayer>(
-    new WavStreamPlayer({ sampleRate: 24000 })
+    new WavStreamPlayer({ sampleRate: 44100 })
   );
   const clientRef = useRef<RealtimeClient>(
     new RealtimeClient(
       {
         apiKey: apiKey,
-        url: LOCAL_RELAY_SERVER_URL,
+        url: REACT_APP_SERVER_URL,
         dangerouslyAllowAPIKeyInBrowser: true,
       }
     )
@@ -142,18 +140,20 @@ export function ConsolePage() {
     setItems(client.conversation.getItems());
 
     // Connect to realtime API
-    await client.connect();
+    await client.connect({ model: "qwen-max@DashScope" });
 
     client.updateSession(
       {
         instructions:'bot_name=奇奇,user_name=轩轩,user_age=11,user_gender=男', 
-        turn_detection: { type: 'server_vad' } 
+        // instructions: instructions,
+        turn_detection: { type: 'server_vad' },
+        voice: '晓辰'
       });
 
     client.sendUserMessageContent([
       {
         type: `input_text`,
-        text: `你好呀!`,
+        text: `你好`,
         // text: `For testing purposes, I want you to list ten car brands. Number each item, e.g. "one (or whatever number you are one): the item name".`
       },
     ]);
@@ -349,12 +349,22 @@ export function ConsolePage() {
     client.on('conversation.updated', async ({ item, delta }: any) => {
       const items = client.conversation.getItems();
       if (delta?.audio) {
-        wavStreamPlayer.addMp3(delta.audio, item.id);
+        // wavStreamPlayer.addMp3(delta.audio, item.id);
+        wavStreamPlayer.add16BitPCM(delta.audio, item.id);
       }
       if (item.status === 'completed' && item.formatted.audio?.length) {
-        const mp3File = new Blob([item.formatted.audio], { type: 'audio/mp3' });
-        item.formatted.file = URL.createObjectURL(mp3File);
+        var sampleRate = item.role === 'user' ? 800 : 44100;
+        const wavFile = await WavRecorder.decode(
+          item.formatted.audio,
+          sampleRate,
+          sampleRate
+        );
+        item.formatted.file = wavFile;
       }
+      // if (item.status === 'completed' && item.formatted.audio?.length) {
+      //   const autoFile = new Blob([item.formatted.audio], { type: 'audio/wav' });
+      //   item.formatted.file = URL.createObjectURL(autoFile);
+      // }
       setItems(items);
     });
 
@@ -452,7 +462,7 @@ export function ConsolePage() {
                         )}
                       {conversationItem.formatted.file && (
                         <audio
-                          src={conversationItem.formatted.file}
+                          src={conversationItem.formatted.file.url}
                           controls
                         />
                       )}

@@ -14,8 +14,8 @@ const LOCAL_RELAY_SERVER_URL: string =
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 
-import { RealtimeClient } from '@openai/realtime-api-beta';
-import { ItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
+import { RealtimeClient } from 'realtime-api-beta-local';
+import { ItemType } from 'realtime-api-beta-local/dist/lib/client.js';
 import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
@@ -189,7 +189,11 @@ export function ConsolePage() {
     // Connect to realtime API
     await client.connect();
 
-    // client.updateSession({instructions:'奇奇'});
+    client.updateSession(
+      {
+        instructions:'bot_name=奇奇,user_name=轩轩,user_age=11,user_gender=男', 
+        turn_detection: { type: 'server_vad' } 
+      });
 
     client.sendUserMessageContent([
       {
