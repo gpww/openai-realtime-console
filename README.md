@@ -2,13 +2,12 @@
 
 The OpenAI Realtime Console is intended as an inspector and interactive API reference
 for the OpenAI Realtime API. It comes packaged with two utility libraries,
-[openai/openai-realtime-api-beta](https://github.com/openai/openai-realtime-api-beta)
+[openai/openai-realtime-api-beta](https://github.com/gpww/openai-realtime-api-beta)
 that acts as a **Reference Client** (for browser and Node.js) and
 [`/src/lib/wavtools`](./src/lib/wavtools) which allows for simple audio
 management in the browser.
 
-<img src="/readme/realtime-console-demo.png" width="800" />
-
+本仓库已经添加https://github.com/gpww/openai-realtime-api-beta为子模块。相比openai原版，允许模型和音色的自由修改。
 # Starting the console
 
 This is a React project created using `create-react-app` that is bundled via Webpack.
@@ -24,7 +23,7 @@ Start your server with:
 $ npm start
 ```
 
-将 .env.example 改成 .env，并填入REACT_APP_OPENAI_API_KEY
+然后，将.env.example 改成 .env，并填入REACT_APP_OPENAI_API_KEY
 
 这个key可通过https://www.xstar.city/rag/ 申请
 
@@ -35,13 +34,13 @@ It should be available via `localhost:4001`.
 ```javascript
 
 import { RealtimeClient } from 'realtime-api-beta-local';
-//这里已将https://github.com/openai/openai-realtime-api-beta库克隆到本仓库通过源码引用——主要是允许模型和音色的自由修改
+//引用https://github.com/gpww/openai-realtime-api-beta子模块
 
 const clientRef = useRef<RealtimeClient>(
 	new RealtimeClient(
 	  {
 		apiKey: apiKey,
-		url: REACT_APP_SERVER_URL,
+		url: REACT_APP_SERVER_URL,//wss://api.xstar.city/v1/raltime
 		dangerouslyAllowAPIKeyInBrowser: true,
 	  }
 	)
@@ -50,14 +49,14 @@ const clientRef = useRef<RealtimeClient>(
 const client = clientRef.current;
 
 // Connect to realtime API
-await client.connect({ model: "qwen-max@DashScope" });//完整模型列表通过 https://api.xstar.city/v1/models 查看
+await client.connect({ model: "qwen-max@DashScope" });//完整模型列表通过 https://api.xstar.city/v1/models 查看，格式为单modelId（自动路由多个供应商）, 或者 modelId@provider（指定供应商）
 
 client.updateSession(
   {
 	instructions:'bot_name=奇奇,user_name=轩轩,user_age=11,user_gender=男', //这种方式激活内置agent，可定义用户参数
-	// instructions: instructions, //自定义系统提示词
+	// instructions: instructions, //方式二，自定义系统提示词。目前无法添加知识库和插件
 	turn_detection: { type: 'server_vad' },
-	voice: '晓辰'// https://api.xstar.city/v1/realtime/voiceList 查看完整音色列表
+	voice: '晓晓'// https://api.xstar.city/v1/realtime/voiceList 查看完整音色列表
   });
 
 client.sendUserMessageContent([
@@ -71,6 +70,8 @@ client.sendUserMessageContent([
 ```
 
 ## Sending streaming audio
+
+也可以参考ConsolePage.tsx中实际demo源码。
 
 To send streaming audio, use the `.appendInputAudio()` method. If you're in `turn_detection: 'disabled'` mode,
 then you need to use `.generate()` to tell the model to respond.

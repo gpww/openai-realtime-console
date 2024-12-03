@@ -147,7 +147,7 @@ export function ConsolePage() {
         instructions:'bot_name=奇奇,user_name=轩轩,user_age=11,user_gender=男', 
         // instructions: instructions,
         turn_detection: { type: 'server_vad' },
-        voice: '晓辰'
+        voice: '晓晓'
       });
 
     client.sendUserMessageContent([
