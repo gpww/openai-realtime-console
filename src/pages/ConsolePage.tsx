@@ -139,15 +139,16 @@ export function ConsolePage() {
     setIsConnected(true);
     setItems(client.conversation.getItems());
 
+    const userId = `test_user${Math.floor(Math.random() * 3) + 1}`;
     // Connect to realtime API
-    await client.connect({ model: "qwen-max@DashScope" });
+    await client.connect({ model: "qwen-max@DashScope", userId});
 
     client.updateSession(
       {
-        instructions:'bot_name=奇奇,user_name=轩轩,user_age=11,user_gender=男', 
+        instructions: `bot_name=奇奇,user_name=轩轩,user_age=11,user_gender=男`, 
         // instructions: instructions,
         turn_detection: { type: 'server_vad' },
-        voice: '晓晓'
+        voice: '龙婉'
       });
 
     client.sendUserMessageContent([
