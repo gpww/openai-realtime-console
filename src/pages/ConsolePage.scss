@@ -157,15 +157,22 @@
         border-top: 1px solid #e7e7e7;
       }
 
+      .conversation-debug {
+        @extend .conversation-common;
+        max-height: 200px;
+      }
       .conversation {
+        @extend .conversation-common;
+        max-height: 90%;
+      }
+
+      .conversation-common {
         display: flex;
         flex-shrink: 0;
         width: 100%;
         overflow: hidden;
         height: 100%;
         min-height: 0;
-        max-height: 90%;
-        // max-height: 200px;
         border-top: 1px solid #e7e7e7;
       }
     }
@@ -357,7 +364,12 @@
   }
 
   @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+      transform: rotate(0deg);
+    }
+
+    100% {
+      transform: rotate(360deg);
+    }
   }
 }

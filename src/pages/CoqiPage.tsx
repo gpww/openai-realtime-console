@@ -29,6 +29,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // 定义模型选项
 const modelOptions = [
+  'AoA多模态',
   'qwen-max',
   'qwen-plus',
   'moonshot-v1-32k',
@@ -39,15 +40,14 @@ const modelOptions = [
   'doubao-pro-32k'
 ];
 
-export function ConsolePage() {
+export function CoqiPage() {
   const [selectedModel, setSelectedModel] = useState(modelOptions[0]);
-
   const handleModelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedModel(event.target.value);
   };
 
   useEffect(() => {
-    document.title = 'xStar实时语音';
+    document.title = 'AoA实时语音';
   }, []);
 
   /**
@@ -171,7 +171,7 @@ export function ConsolePage() {
     }
     return userId;
   };
-
+  
   /**
    * Connect to conversation:
    * WavRecorder taks speech input, WavStreamPlayer output, client is API client
@@ -189,22 +189,26 @@ export function ConsolePage() {
 
     const userId = getUserId();
     // Connect to realtime API
-    await client.connect({ model: selectedModel, userId});
+    let currentModel = selectedModel;
+    if (currentModel === 'AoA多模态') {
+      currentModel = 'qwen-max';
+    }
+    await client.connect({ model: currentModel, userId});
 
     client.updateSession(
       {
         instructions: instructions,
-        voice: '龙婉',// https://api.xstar.city/v1/realtime/voiceList 查看完整音色列表
-        turn_detection: { type: 'server_vad' },//不写的话默认按压模式(server_vad = None)
-        input_audio_format: 'Raw16KHz16BitMonoPcm',//不写的话默认这个
-        output_audio_format: 'Raw8KHz16BitMonoPcm',//不写的话默认这个
+        voice: '龙婉',
+        turn_detection: { type: 'server_vad' },
+        input_audio_format: 'Raw16KHz16BitMonoPcm',
+        output_audio_format: 'Raw8KHz16BitMonoPcm',
         // output_audio_format: 'MonoMp3',//网页端解码mp3会卡顿
       });
 
     client.sendUserMessageContent([
       {
-        // type: `input_text`,//正常发送文本
-        type: `tts_text`,//直接回复语音，不通过大模型
+        // type: `input_text`,
+        type: `tts_text`,
         text: `你来啦？`,
       },
     ]);
@@ -454,19 +458,7 @@ export function ConsolePage() {
                 </option>
               ))}
             </select>
-          </div>
-        {/* <div className="content-api-key">
-          {(
-            <Button
-              icon={Edit}
-              iconPosition="end"
-              buttonStyle="flush"
-              label={`api key: ${apiKey.slice(0, 3)}...`}
-              onClick={() => resetAPIKey()}
-            />
-          )}
-          
-        </div> */}
+        </div>
       </div>
       <div className="content-main">
         {isConnecting && (

@@ -157,16 +157,20 @@ export class WavStreamPlayer {
   addMp3(arrayBuffer, trackId = 'default') {
     let buffer;
     if (arrayBuffer instanceof Int16Array) {
-      buffer = arrayBuffer;
+      buffer = arrayBuffer.buffer; // 获取底层的 ArrayBuffer
     } else if (arrayBuffer instanceof ArrayBuffer) {
-      buffer = new Int16Array(arrayBuffer);
+      buffer = arrayBuffer;
     } else {
       throw new Error('mp3Data must be an Int16Array or ArrayBuffer');
     }
     let audioBuffer;
-    this.context.decodeAudioData(buffer.buffer, (decodedData) => {
-      audioBuffer = decodedData;
-    });
+    this.context.decodeAudioData(buffer)
+      .then((decodedData) => {
+        audioBuffer = decodedData;
+      })
+      .catch((error) => {
+        console.error('Error decoding audio data:', error);
+      });
     if (!audioBuffer) {
       throw new Error('Failed to decode mp3Data');
     }

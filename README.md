@@ -49,22 +49,25 @@ const clientRef = useRef<RealtimeClient>(
 const client = clientRef.current;
 
 // Connect to realtime API
-await client.connect({ model: "qwen-max@DashScope" });//完整模型列表通过 https://api.xstar.city/v1/models 查看，格式为单modelId（自动路由多个供应商）, 或者 modelId@provider（指定供应商）
+await client.connect({ model: "qwen-max@DashScope", userId });
+//完整模型列表通过 https://api.xstar.city/v1/models 查看，格式为单modelId（自动路由多个供应商）, 或者 modelId@provider（指定供应商）
 
-client.updateSession(
-  {
-	instructions:'bot_name=奇奇,user_name=轩轩,user_age=11,user_gender=男', //这种方式激活内置agent，可定义用户参数
-	// instructions: instructions, //方式二，自定义系统提示词。目前无法添加知识库和插件
-	turn_detection: { type: 'server_vad' },
-	voice: '晓晓'// https://api.xstar.city/v1/realtime/voiceList 查看完整音色列表
-  });
+    client.updateSession(
+      {
+        instructions: instructions,//可配置agent模板提示词，这种方式激活内置agent（with 灵活定义的用户参数）
+        voice: '龙婉',// https://api.xstar.city/v1/realtime/voiceList 查看完整音色列表
+        turn_detection: { type: 'server_vad' },//不写的话默认按压模式(server_vad = None)
+        input_audio_format: 'Raw16KHz16BitMonoPcm',//不写的话默认这个
+        output_audio_format: 'Raw8KHz16BitMonoPcm',//不写的话默认这个
+        // output_audio_format: 'MonoMp3',//网页端解码mp3会卡顿
+      });
 
-client.sendUserMessageContent([
-  {
-	type: `input_text`,
-	text: `你好`,//发送文本消息
-	// text: `For testing purposes, I want you to list ten car brands. Number each item, e.g. "one (or whatever number you are one): the item name".`
-  },
+    client.sendUserMessageContent([
+      {
+        // type: `input_text`,//正常发送文本
+        type: `tts_text`,//直接回复语音，不通过大模型
+        text: `你来啦？`,
+      },
 ]);
 
 ```

@@ -11,8 +11,8 @@
         <script type="module">
         import { WavStreamPlayer } from '/src/lib/wavtools/index.js';
 
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-        const wavStreamPlayer = new WavStreamPlayer({ sampleRate: 24000 });
+        const audioContext = new window.AudioContext({ sampleRate: 44100 });
+        const wavStreamPlayer = new WavStreamPlayer({ sampleRate: 44100 });
 
         document.getElementById('playButton').addEventListener('click', async () => {
             // Connect to audio output
@@ -24,11 +24,19 @@
             }
 
             // 获取 MP3 文件并解码
-            fetch('test.mp3')
+            fetch('xx.mp3')
                 .then(response => response.arrayBuffer())
                 .then(arrayBuffer => {
-                    const int16Array = new Int16Array(arrayBuffer);
-                    return wavStreamPlayer.addMp3(int16Array, 'my-track');
+                    audioContext.decodeAudioData(arrayBuffer)
+                        .then((decodedData) => {
+                            console.log('Decoded audio data:', decodedData);
+                            wavStreamPlayer.add16BitPCM(decodedData, 'my-track');
+                        })
+                        .catch((error) => {
+                            console.error('Error decoding audio data:', error);
+                        });
+                    // const int16Array = new Int16Array(arrayBuffer);
+                    // return wavStreamPlayer.addMp3(arrayBuffer, 'my-track');
                 })
                 .catch(error => console.error('Error decoding audio data:', error));
         });
