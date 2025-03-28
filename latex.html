@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>数学竞赛题目查看器</title>
+        <link rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+        <script
+            src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+        <script
+            src="https://cdn.jsdelivr.net/npm/@iktakahiro/markdown-it-katex@4.0.1/dist/markdown-it-katex.min.js"></script>
+        <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+        <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .problem-container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #2980b9;
+            margin-top: 30px;
+        }
+        .solution {
+            background-color: #eaf2f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #fileInput {
+            margin-bottom: 20px;
+        }
+        #problemSelector {
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        pre {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .format-solution {
+            background-color: #f5f5f5;
+            border-left: 4px solid #2ecc71;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .code {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #333;
+            border-left: 3px solid #3498db;
+        }
+        
+        /* 针对KaTeX的样式调整 */
+        .katex { font-size: 1.1em; }
+        </style>
+    </head>
+    <body>
+        <h1>数学竞赛题目查看器</h1>
+
+        <div class="controls">
+            <button id="loadButton">加载JSON文件</button>
+            <div id="selectorContainer" style="display: none;">
+                <label for="problemSelector">选择题目:</label>
+                <select id="problemSelector"></select>
+            </div>
+        </div>
+
+        <div class="problem-container">
+            <h2>题目</h2>
+            <div id="questionContent"></div>
+
+            <div class="solution">
+                <h2>解答</h2>
+                <div id="solutionContent"></div>
+            </div>
+
+            <div class="format-solution">
+                <h2>格式化解答</h2>
+                <div id="formatSolutionContent"></div>
+            </div>
+        </div>
+
+        <script>
+            // 初始化 markdown-it 和 katex 插件
+            // 修改：简化 markdown-it-katex 插件加载
+            const md = window.markdownit({
+                html: true,
+                linkify: true,
+                typographer: true
+            }).use(window.markdownitKatex);
+            
+            // 处理文本格式化
+            function processText(text) {
+                if (!text) return '';
+                
+                // 预处理：修复反斜杠问题（JSON可能会对反斜杠进行转义）
+                text = text.replace(/\\\\/g, '\\');
+                
+                // 处理特殊标签
+                text = text.replace(/\[list\]/g, '');
+                text = text.replace(/\[\/list\]/g, '');
+                
+                // 处理换行符（确保换行被正确解析为Markdown换行）
+                text = text.replace(/\n/g, '\n\n');
+                
+                // 检查是否为代码块
+                if (text.includes('import Mathlib') || text.includes('theorem')) {
+                    return `<pre class="code">${text}</pre>`;
+                }
+                
+                // 使用markdown-it渲染内容（会处理内联的LaTeX）
+                return md.render(text);
+            }
+            
+            // 文件加载与拖放支持
+            let allProblems = [];
+            
+            function displayProblem(problem) {
+                const questionContent = document.getElementById('questionContent');
+                const solutionContent = document.getElementById('solutionContent');
+                const formatSolutionContent = document.getElementById('formatSolutionContent');
+                
+                // 渲染内容
+                questionContent.innerHTML = processText(problem.question);
+                solutionContent.innerHTML = processText(problem.solution);
+                
+                // 如果存在格式化解答字段则渲染
+                if (problem.formatSolution) {
+                    formatSolutionContent.innerHTML = processText(problem.formatSolution);
+                    document.querySelector('.format-solution').style.display = 'block';
+                } else {
+                    document.querySelector('.format-solution').style.display = 'none';
+                }
+            }
+            
+            function setupProblemSelector(problems) {
+                const selector = document.getElementById('problemSelector');
+                selector.innerHTML = '';
+                problems.forEach((problem, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = `题目 ${index + 1}`;
+                    selector.appendChild(option);
+                });
+                document.getElementById('selectorContainer').style.display = 'block';
+                selector.addEventListener('change', () => {
+                    const selectedIndex = parseInt(selector.value);
+                    displayProblem(problems[selectedIndex]);
+                });
+            }
+            
+            // jQuery 文档加载完成事件
+            $(document).ready(function() {
+                // 按钮点击事件
+                $('#loadButton').click(function() {
+                    console.log("加载按钮点击"); // 新增调试日志
+                    // 创建一个隐藏的文件输入框并自动点击
+                    $('<input type="file" accept=".json" style="display:none">')
+                        .appendTo('body')
+                        .change(function(e) {
+                            console.log("文件输入框值改变"); // 新增调试日志
+                            const file = e.target.files[0];
+                            if (file) {
+                                const reader = new FileReader();
+                                reader.onload = function(e) {
+                                    console.log("文件读取完成"); // 新增调试日志
+                                    try {
+                                        const content = e.target.result.trim();
+                                        const problem = JSON.parse(content);
+                                        displayProblem(Array.isArray(problem) ? problem[0] : problem);
+                                        if (Array.isArray(problem)) {
+                                            allProblems = problem;
+                                            setupProblemSelector(allProblems);
+                                        }
+                                    } catch (error) {
+                                        console.error("解析JSON时出错:", error);
+                                        alert("无法解析JSON文件。请确保文件格式正确。");
+                                    }
+                                };
+                                reader.readAsText(file);
+                                // 读取完成后移除临时创建的输入元素
+                                $(this).remove();
+                            } else {
+                                alert("请先选择一个JSON文件");
+                            }
+                        })
+                        .click();
+                });
+                
+                // 拖放事件处理
+                $(document).on({
+                    dragover: function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    },
+                    drop: function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const file = e.originalEvent.dataTransfer.files[0];
+                        if (file && file.name.endsWith('.json')) {
+                            const reader = new FileReader();
+                            reader.onload = function(e) {
+                                try {
+                                    const content = e.target.result.trim();
+                                    const problem = JSON.parse(content);
+                                    displayProblem(Array.isArray(problem) ? problem[0] : problem);
+                                    if (Array.isArray(problem)) {
+                                        allProblems = problem;
+                                        setupProblemSelector(allProblems);
+                                    }
+                                } catch (error) {
+                                    console.error("解析JSON时出错:", error);
+                                    alert("无法解析JSON文件。请确保文件格式正确。");
+                                }
+                            };
+                            reader.readAsText(file);
+                        } else {
+                            alert("请选择JSON文件");
+                        }
+                    }
+                });
+            });
+        </script>
+    </body>
+</html>

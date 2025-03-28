@@ -120,6 +120,13 @@ export function ConsolePage() {
    */
   const [items, setItems] = useState<ItemType[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  // Add this near your other refs
+  const isConnectedRef = useRef(isConnected);
+  // Update the ref whenever isConnected changes
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
+
   const [isBotSpeaking, setIsBotSpeaking] = useState(false);
   // const isBotSpeaking = useRef(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -203,9 +210,9 @@ export function ConsolePage() {
 
     client.sendUserMessageContent([
       {
-        // type: `input_text`,//正常发送文本
-        type: `tts_text`,//直接回复语音，不通过大模型
-        text: `你来啦？`,
+        type: "input_text",//正常发送文本
+        // type: "tts_text",//直接回复语音，不通过大模型
+        text: "用户又上线了，请根据聊天历史打个招呼，或者提个问题，或者说点什么。",
       },
     ]);
 
@@ -375,17 +382,14 @@ export function ConsolePage() {
       }
     };
     wavStreamPlayer.onended = async () => {
-      // console.log('播放结束');
-      {
         // isBotSpeaking.current = false;
         setIsBotSpeaking(false);
         if(!isMutedRef.current){
           const client = clientRef.current;
           const wavRecorder = wavRecorderRef.current;
-          if(!wavRecorder.recording)
+          if(!wavRecorder.recording && isConnectedRef.current)
             await wavRecorder.record((data) => client.appendInputAudio(data.mono))
         }
-      }
     };
     const client = clientRef.current;
 

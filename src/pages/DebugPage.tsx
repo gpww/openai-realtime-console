@@ -98,6 +98,12 @@ export function DebugPage() {
     [key: string]: boolean;
   }>({});
   const [isConnected, setIsConnected] = useState(false);
+  // Add this near your other refs
+  const isConnectedRef = useRef(isConnected);
+  // Update the ref whenever isConnected changes
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
   const canPushToTalkRef = useRef(true);
   const [canPushToTalk, setCanPushToTalk] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
@@ -188,13 +194,13 @@ export function DebugPage() {
         output_audio_format: 'Raw8KHz16BitMonoPcm',
       });
 
-    client.sendUserMessageContent([
-      {
-        // type: `input_text`,
-        type: `tts_text`,
-        text: `你来啦？`,
-        // text: `For testing purposes, I want you to list ten car brands. Number each item, e.g. "one (or whatever number you are one): the item name".`
-      },
+      client.sendUserMessageContent([
+        {
+          type: "input_text",
+          text: "用户又上线了，请根据聊天历史打个招呼，或者提个问题，或者说点什么。",
+          // type: `tts_text`,
+          // text: `你来啦？`,
+        },
     ]);
 
     // Connect to microphone
@@ -400,7 +406,7 @@ export function DebugPage() {
       {
         const client = clientRef.current;
         const wavRecorder = wavRecorderRef.current;
-        if(!wavRecorder.recording)
+          if(!wavRecorder.recording && isConnectedRef.current)
           await wavRecorder.record((data) => client.appendInputAudio(data.mono))
       }
     };

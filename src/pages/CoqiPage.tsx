@@ -15,7 +15,7 @@ const OPENAI_API_KEY: string = process.env.REACT_APP_OPENAI_API_KEY || '';
 import { useEffect, useRef, useCallback, useState } from 'react';
 
 import { RealtimeClient } from 'realtime-api-beta-local';
-import { ItemType, AudioFormatType } from 'realtime-api-beta-local/dist/lib/client.js';
+import { type ItemType, AudioFormatType } from 'realtime-api-beta-local/dist/lib/client.js';
 import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
@@ -120,6 +120,13 @@ export function CoqiPage() {
    */
   const [items, setItems] = useState<ItemType[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  // Add this near your other refs
+  const isConnectedRef = useRef(isConnected);
+  // Update the ref whenever isConnected changes
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
+
   const [isBotSpeaking, setIsBotSpeaking] = useState(false);
   // const isBotSpeaking = useRef(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -197,7 +204,7 @@ export function CoqiPage() {
 
     client.updateSession(
       {
-        instructions: instructions,
+        instructions: 'agent_template={coqi1}',
         voice: '龙婉',
         turn_detection: { type: 'server_vad' },
         input_audio_format: 'Raw16KHz16BitMonoPcm',
@@ -207,9 +214,10 @@ export function CoqiPage() {
 
     client.sendUserMessageContent([
       {
-        // type: `input_text`,
-        type: `tts_text`,
-        text: `你来啦？`,
+        type: "input_text",
+        text: "用户又上线了，请根据聊天历史打个招呼，或者提个问题，或者说点什么。",
+        // type: `tts_text`,
+        // text: `你来啦？`,
       },
     ]);
 
@@ -379,17 +387,14 @@ export function CoqiPage() {
       }
     };
     wavStreamPlayer.onended = async () => {
-      // console.log('播放结束');
-      {
         // isBotSpeaking.current = false;
         setIsBotSpeaking(false);
         if(!isMutedRef.current){
           const client = clientRef.current;
           const wavRecorder = wavRecorderRef.current;
-          if(!wavRecorder.recording)
+          if(!wavRecorder.recording && isConnectedRef.current)
             await wavRecorder.record((data) => client.appendInputAudio(data.mono))
         }
-      }
     };
     const client = clientRef.current;
 
@@ -411,7 +416,7 @@ export function CoqiPage() {
         wavStreamPlayer.add16BitPCM(audioData, item.id);
       }
       if (item.status === 'completed' && item.formatted.audio?.length) {
-        var sampleRate = item.role === 'user' ? 16000 : 8000;
+        const sampleRate = item.role === 'user' ? 16000 : 8000;
         const wavFile = await WavRecorder.decode(
           item.formatted.audio,
           sampleRate,
