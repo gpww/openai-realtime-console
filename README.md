@@ -24,29 +24,27 @@
 
 ## 内置功能特性
 
-本项目内置了多种功能插件，用于增强会话体验：
+内置 Demo Agent "幻星" 内置了多种功能插件，用于增强会话体验：
 
-1. **BrainTwister**: When you need to generate a riddle, please use the plugin to fetch it from the database instead of creating it yourself. However, when answering riddles posed by others, there is no need to call this plugin. Do not include the answer when you pose a riddle; provide it only if the user can't figure it out. Also, note that riddles do not have a single correct answer, so other reasonable answers are acceptable. Be aware that the input text comes from speech recognition, which may result in errors with words that have similar pronunciations. In such cases, answers with similar sounds are also correct. If it's an English riddle, please present it in its original English form WITHOUT translation.
-
-2. **IdiomChain**: 在需要成语接龙语境下，请调用该插件（并不是所有场景下说成语都接龙，要根据上下文判断）。如果是你先说，请调用GetRandomIdiom。如果需要接续，请调用GetNextIdiom。如果接不上请参考函数返回提示。【4字成语大全】收录成语54,089个，剔除不可接或者被接的成语后，剩余46,464个成语。
-
-3. **MathGamePlugin**: 这是一个数字游戏插件，经典的24点游戏也可以通过这个插件实现。给定最多6个整数，通过四则运算计算出目标值。插件可以找到所有可能的运算方法。解释运算方法的时候，请列出中间结果方便用户理解。例如解释 (5-(9/3))*12 = 24 的时候可以解释成：先用5-9/3=2，再用2*12=24。请不要输出Latex公式，也不要分点，这样会导致语音合成混乱。
-
-4. **MusicPlugin**: 可以随机播放唱歌的歌曲，或者轻音乐。
-
-5. **SoundGame**: 该插件可以让用户听到各种声音（请不要说播放声音，可以结合语境说得诗意一些）。内置2300+声音片段，主要包括人类声音、动物声音、物体声音、音乐声音和自然声音这五大类声音类型。其中人类声音包括人声、呼吸声等；动物声音涉及家养和野生动物；物体声音包括车辆、机械等人造物品的声音；音乐声音涵盖了乐器、音乐风格等；自然声音则包括风、雷、水等自然现象产生的声音。
-
-6. **SpeechPlugin**: SpeechPlugin 插件提供了一系列语音合成功能，允许用户控制语音播放的各种参数。主要语义函数包括：
-   - **AdjustVoiceSpeed**：根据用户要求调整语速
-   - **SwitchVoice**：切换语音角色（当用户明确要求时）
-   - **CloneVoice**：当用户要求克隆当前语音的时候调用，切换语音的时候不要调用语音克隆。一个用户只能克隆一个音色，保存为名字叫"克隆语音"的角色，再次克隆会覆盖之前的版本
+1. **SpeechPlugin**: SpeechPlugin 插件提供了一系列语音合成功能，允许用户控制语音播放的各种参数。主要语义函数包括：
+   - **AdjustVoiceSpeed**：根据用户要求调整语速，比如说快点？慢点？
+   - **SwitchVoice**：切换语音角色（当用户明确要求时）完整列表见 https://api.xstar.city/v1/realtime/voiceList
+   - **CloneVoice**：交互式语音克隆，切换语音的时候不要调用语音克隆。一个用户只能克隆一个音色，保存为名字叫"克隆语音"的角色，再次克隆会覆盖之前的版本
    - **DeepThinkingMode**：当用户明确要求以深度思考模式来回答时候调用
    - **WebSearchMode**：上网/联网搜索来回答用户问题
    - **StartSimultaneousTranslation**：可启动进入语音同传翻译模式（当用户明确要求时），支持多语言间的实时翻译，并可以检测退出模式的请求
 
-7. **UtilsPlugin**: 工具插件，用于需要语义函数的地方
+2. **MusicPlugin**: 可以随机播放唱歌的歌曲，或者轻音乐。
 
-8. **WeatherWatch**: 查询中国372个地区（包括州、省、市、县、特别行政区、盟、旗）和1011个市内区（例如：深圳市南山区）的天气。可查询当日实时天气情况，和未来3天的天气预报。数据来源是中国气象局。实况天气每小时更新多次，预报天气每天更新3次，分别在8、11、18点左右更新。
+3. **SoundGame**: 该插件可以让用户听到各种声音（请不要说播放声音，可以结合语境说得诗意一些）。内置2300+声音片段，主要包括人类声音、动物声音、物体声音、音乐声音和自然声音这五大类声音类型。其中人类声音包括人声、呼吸声等；动物声音涉及家养和野生动物；物体声音包括车辆、机械等人造物品的声音；音乐声音涵盖了乐器、音乐风格等；自然声音则包括风、雷、水等自然现象产生的声音。
+
+4. **WeatherWatch**: 查询中国372个地区（包括州、省、市、县、特别行政区、盟、旗）和1011个市内区（例如：深圳市南山区）的天气。可查询当日实时天气情况，和未来3天的天气预报。数据来源是中国气象局。实况天气每小时更新多次，预报天气每天更新3次，分别在8、11、18点左右更新。
+
+5. **MathGamePlugin**: 这是一个数字游戏插件，经典的24点游戏也可以通过这个插件实现。给定最多6个整数，通过四则运算计算出目标值。插件可以找到所有可能的运算方法。解释运算方法的时候，请列出中间结果方便用户理解。例如解释 (5-(9/3))*12 = 24 的时候可以解释成：先用5-9/3=2，再用2*12=24。请不要输出Latex公式，也不要分点，这样会导致语音合成混乱。
+
+6. **BrainTwister**: When you need to generate a riddle, please use the plugin to fetch it from the database instead of creating it yourself. However, when answering riddles posed by others, there is no need to call this plugin. Do not include the answer when you pose a riddle; provide it only if the user can't figure it out. Also, note that riddles do not have a single correct answer, so other reasonable answers are acceptable. Be aware that the input text comes from speech recognition, which may result in errors with words that have similar pronunciations. In such cases, answers with similar sounds are also correct. If it's an English riddle, please present it in its original English form WITHOUT translation.
+
+7. **IdiomChain**: 在需要成语接龙语境下，请调用该插件（并不是所有场景下说成语都接龙，要根据上下文判断）。如果是你先说，请调用GetRandomIdiom。如果需要接续，请调用GetNextIdiom。如果接不上请参考函数返回提示。【4字成语大全】收录成语54,089个，剔除不可接或者被接的成语后，剩余46,464个成语。
 
 ## 快速入门
 
