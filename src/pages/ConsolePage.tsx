@@ -29,8 +29,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 // 定义模型选项
 const modelOptions = [
-  'qwen-max',
   'qwen-plus',
+  'qwen-turbo',
+  'qwen-max',
   'moonshot-v1-32k',
   'moonshot-v1-128k',
   'gpt-4o',
@@ -73,13 +74,16 @@ export function ConsolePage() {
     new WavRecorder({ sampleRate: 16000 })
   );
   const wavStreamPlayerRef = useRef<WavStreamPlayer>(
-    new WavStreamPlayer({ sampleRate: 8000 })
+    new WavStreamPlayer({ sampleRate: 16000 })
   );
-  const audioContext = new window.AudioContext({ sampleRate: 8000 });
+  const audioContext = new window.AudioContext({ sampleRate: 16000 });
   const isMp3 = false;
-  const decodeMp3 = useCallback((arrayBuffer: Int16Array) => {
+  const isOpus = false; // Add flag to check if we're using Opus format
+
+  const decodeAudio = useCallback((arrayBuffer: Int16Array | Uint8Array) => {
     return new Promise<AudioBuffer>((resolve, reject) => {
-      const buffer = arrayBuffer.buffer; // 获取底层的 ArrayBuffer
+      // Get the underlying ArrayBuffer regardless of the input type
+      const buffer = arrayBuffer.buffer;
       audioContext.decodeAudioData(buffer as ArrayBuffer)
         .then(decodedData => {
           resolve(decodedData);
@@ -204,7 +208,7 @@ export function ConsolePage() {
         voice: '龙婉',// https://api.xstar.city/v1/realtime/voiceList 查看完整音色列表
         turn_detection: { type: 'server_vad' },//不写的话默认按压模式(server_vad = None)
         input_audio_format: 'Raw16KHz16BitMonoPcm',//不写的话默认这个
-        output_audio_format: 'Raw8KHz16BitMonoPcm',//不写的话默认这个
+        output_audio_format: 'Raw16KHz16BitMonoPcm',//不写的话默认这个
         // output_audio_format: 'MonoMp3',//网页端解码mp3会卡顿
       });
 
@@ -406,12 +410,14 @@ export function ConsolePage() {
       const items = client.conversation.getItems();
       if (delta?.audio) {
         let audioData = delta.audio;
-        if(isMp3)
-          audioData = await decodeMp3(delta.audio);
+        if (isMp3 || isOpus) {
+          // Use the generic decoder for both MP3 and Opus formats
+          audioData = await decodeAudio(delta.audio);
+        }
         wavStreamPlayer.add16BitPCM(audioData, item.id);
       }
       if (item.status === 'completed' && item.formatted.audio?.length) {
-        var sampleRate = item.role === 'user' ? 16000 : 8000;
+        var sampleRate = item.role === 'user' ? 16000 : 16000;
         const wavFile = await WavRecorder.decode(
           item.formatted.audio,
           sampleRate,

@@ -15,7 +15,7 @@ const OPENAI_API_KEY: string = process.env.REACT_APP_OPENAI_API_KEY || '';
 import { useEffect, useRef, useCallback, useState } from 'react';
 
 import { RealtimeClient } from 'realtime-api-beta-local';
-import { ItemType } from 'realtime-api-beta-local/dist/lib/client.js';
+import type { ItemType } from 'realtime-api-beta-local/dist/lib/client.js';
 import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { WavRenderer } from '../utils/wav_renderer';
 import { instructions } from '../utils/conversation_config.js';
@@ -23,7 +23,6 @@ import { instructions } from '../utils/conversation_config.js';
 import { X, Edit, Zap, ArrowUp, ArrowDown } from 'react-feather';
 import { Button } from '../components/button/Button';
 import { Toggle } from '../components/toggle/Toggle';
-import { Map } from '../components/Map';
 import { v4 as uuidv4 } from 'uuid';
 
 import './ConsolePage.scss';
@@ -61,8 +60,24 @@ export function DebugPage() {
     new WavRecorder({ sampleRate: 16000 })
   );
   const wavStreamPlayerRef = useRef<WavStreamPlayer>(
-    new WavStreamPlayer({ sampleRate: 8000 })
+    new WavStreamPlayer({ sampleRate: 16000 })
   );
+  const audioContext = new window.AudioContext({ sampleRate: 16000 });
+  const isMp3 = false;
+  const decodeAudio = useCallback((arrayBuffer: Int16Array | Uint8Array) => {
+    return new Promise<AudioBuffer>((resolve, reject) => {
+      const buffer = arrayBuffer.buffer;
+      audioContext.decodeAudioData(buffer as ArrayBuffer)
+        .then(decodedData => {
+          resolve(decodedData);
+        })
+        .catch(error => {
+          console.error('Error decoding audio data:', error);
+          reject(error);
+        });
+    });
+  }, [audioContext]);
+
   const clientRef = useRef<RealtimeClient>(
     new RealtimeClient(
       {
@@ -110,8 +125,9 @@ export function DebugPage() {
 
   // 定义模型选项
   const modelOptions = [
-    'qwen-max',
     'qwen-plus',
+    'qwen-turbo',
+    'qwen-max',
     'moonshot-v1-32k',
     'moonshot-v1-128k',
     'gpt-4o',
@@ -191,7 +207,7 @@ export function DebugPage() {
         voice: '龙婉',
         // turn_detection: { type: 'server_vad' }
         input_audio_format: 'Raw16KHz16BitMonoPcm',
-        output_audio_format: 'Raw8KHz16BitMonoPcm',
+        output_audio_format: 'Raw16KHz16BitMonoPcm',
       });
 
       client.sendUserMessageContent([
@@ -200,7 +216,7 @@ export function DebugPage() {
           text: "用户又上线了，请根据聊天历史打个招呼，或者提个问题，或者说点什么。",
           // type: `tts_text`,
           // text: `你来啦？`,
-        },
+        }
     ]);
 
     // Connect to microphone
@@ -246,6 +262,7 @@ export function DebugPage() {
     const wavRecorder = wavRecorderRef.current;
     const wavStreamPlayer = wavStreamPlayerRef.current;
     const trackSampleOffset = await wavStreamPlayer.interrupt();
+
     if (trackSampleOffset?.trackId) {
       const { trackId, offset } = trackSampleOffset;
       await client.cancelResponse(trackId, offset);
@@ -437,11 +454,23 @@ export function DebugPage() {
     client.on('conversation.updated', async ({ item, delta }: any) => {
       const items = client.conversation.getItems();
       if (delta?.audio) {
-        // wavStreamPlayer.addMp3(delta.audio, item.id);
-        wavStreamPlayer.add16BitPCM(delta.audio, item.id);
+        let audioData = delta.audio;
+        if (isMp3) {
+          try {
+            const decodedBuffer = await decodeAudio(delta.audio);
+            audioData = decodedBuffer;
+            wavStreamPlayer.add16BitPCM(audioData, item.id);
+          } catch (error) {
+            console.error('Error in MP3 decoding:', error);
+          }
+        } else {
+          // 直接添加原始 PCM 数据
+          wavStreamPlayer.add16BitPCM(audioData, item.id);
+        }
       }
+
       if (item.status === 'completed' && item.formatted.audio?.length) {
-        var sampleRate = item.role === 'user' ? 16000 : 8000;
+        var sampleRate = item.role === 'user' ? 16000 : 16000;
         const wavFile = await WavRecorder.decode(
           item.formatted.audio,
           sampleRate,

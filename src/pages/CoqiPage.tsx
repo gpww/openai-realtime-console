@@ -30,8 +30,9 @@ import { v4 as uuidv4 } from 'uuid';
 // 定义模型选项
 const modelOptions = [
   'AoA多模态',
-  'qwen-max',
   'qwen-plus',
+  'qwen-turbo',
+  'qwen-max',
   'moonshot-v1-32k',
   'moonshot-v1-128k',
   'gpt-4o',
@@ -73,9 +74,9 @@ export function CoqiPage() {
     new WavRecorder({ sampleRate: 16000 })
   );
   const wavStreamPlayerRef = useRef<WavStreamPlayer>(
-    new WavStreamPlayer({ sampleRate: 8000 })
+    new WavStreamPlayer({ sampleRate: 16000 })
   );
-  const audioContext = new window.AudioContext({ sampleRate: 8000 });
+  const audioContext = new window.AudioContext({ sampleRate: 16000 });
   const isMp3 = false;
   const decodeMp3 = useCallback((arrayBuffer: Int16Array) => {
     return new Promise<AudioBuffer>((resolve, reject) => {
@@ -198,7 +199,7 @@ export function CoqiPage() {
     // Connect to realtime API
     let currentModel = selectedModel;
     if (currentModel === 'AoA多模态') {
-      currentModel = 'qwen-max';
+      currentModel = 'qwen-plus';
     }
     await client.connect({ model: currentModel, userId});
 
@@ -208,7 +209,7 @@ export function CoqiPage() {
         voice: '龙婉',
         turn_detection: { type: 'server_vad' },
         input_audio_format: 'Raw16KHz16BitMonoPcm',
-        output_audio_format: 'Raw8KHz16BitMonoPcm',
+        output_audio_format: 'Raw16KHz16BitMonoPcm',
         // output_audio_format: 'MonoMp3',//网页端解码mp3会卡顿
       });
 
@@ -416,7 +417,7 @@ export function CoqiPage() {
         wavStreamPlayer.add16BitPCM(audioData, item.id);
       }
       if (item.status === 'completed' && item.formatted.audio?.length) {
-        const sampleRate = item.role === 'user' ? 16000 : 8000;
+        const sampleRate = item.role === 'user' ? 16000 : 16000;
         const wavFile = await WavRecorder.decode(
           item.formatted.audio,
           sampleRate,
