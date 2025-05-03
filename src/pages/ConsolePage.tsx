@@ -27,21 +27,26 @@ import { Button } from '../components/button/Button';
 import './ConsolePage.scss';
 import { v4 as uuidv4 } from 'uuid';
 
-// 定义模型选项
-const modelOptions = [
-  'qwen-plus',
-  'qwen-turbo',
-  'qwen-max',
-  'moonshot-v1-32k',
-  'moonshot-v1-128k',
-  'gpt-4o',
-  'gpt-4o-mini',
-  //'yi-large-fc',
-  'doubao-pro-32k'
-];
+// 定义模型选项（显示名称: 实际名称）
+const modelOptions: Record<string, string> = {
+  '千问Plus': 'qwen-plus',
+  '千问Turbo': 'qwen-turbo',
+  '千问Max': 'qwen-max',
+  '豆包极速': 'doubao-1-5-lite-32k',
+  '豆包Pro': 'doubao-1-5-pro-32k',
+  '豆包角色扮演': 'doubao-1-5-pro-32k-character',
+  'Moonshot 32k': 'moonshot-v1-32k',
+  'Moonshot 128k': 'moonshot-v1-128k',
+  'GPT-4o': 'gpt-4o',
+  'GPT-4o-mini': 'gpt-4o-mini',
+  // 'qwen2.5-7b-instruct': 'qwen2.5-7b-instruct',
+  // 'yi-large-fc': 'yi-large-fc',
+};
 
 export function ConsolePage() {
-  const [selectedModel, setSelectedModel] = useState(modelOptions[0]);
+  // 默认选第一个
+  const modelNames = Object.keys(modelOptions);
+  const [selectedModel, setSelectedModel] = useState(modelNames[0]);
 
   const handleModelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedModel(event.target.value);
@@ -200,7 +205,7 @@ export function ConsolePage() {
 
     const userId = getUserId();
     // Connect to realtime API
-    await client.connect({ model: selectedModel, userId});
+    await client.connect({ model: modelOptions[selectedModel], userId});
 
     client.updateSession(
       {
@@ -458,9 +463,9 @@ export function ConsolePage() {
               onChange={handleModelChange}
               disabled={isConnected}
             >
-              {modelOptions.map((model) => (
-                <option key={model} value={model}>
-                  {model}
+              {modelNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
                 </option>
               ))}
             </select>

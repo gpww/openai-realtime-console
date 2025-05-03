@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>WebRTC Connection</title>
+</head>
+<body>
+
+    <video controls autoplay="autoplay" id="videoCtl" width="640" height="480"></video>
+    <br/>
+    <label for="ephemeralKey">Enter API Key: </label>
+    <input type="text" id="ephemeralKey" placeholder="API Key" style="width:300px;" />
+    <button id="startConnectionBtn">Start Connection</button>
+    <button id="closeConnectionBtn">Close Connection</button>
+    <!-- 新增关闭按钮 -->
+
+    <script>
+        const instructions = `agent_template={幻星}`;
+
+        let pc = null; // 提升作用域，便于关闭
+
+        async function init(ephemeralKey) {
+            const EPHEMERAL_KEY = ephemeralKey;
+
+            // Create a peer connection
+            pc = new RTCPeerConnection();
+
+            pc.onconnectionstatechange = () => {
+                console.log("onconnectionstatechange: " + pc.connectionState);
+            }
+
+            // Set up to play remote audio from the model
+            const audioEl = document.createElement("audio");
+            audioEl.autoplay = true;
+            const videoEl = document.getElementById("videoCtl");
+
+            pc.ontrack = (event) => {
+                console.log("ontrack event:", event);
+                // Check if the stream contains an audio track
+                if (event.track.kind === "audio") {
+                    console.log("Received remote audio track");
+                    const audioEl = document.createElement("audio");
+                    audioEl.autoplay = true;
+                    audioEl.srcObject = event.streams[0];
+                    document.body.appendChild(audioEl); // Optional: Add audio element to DOM
+                }
+
+                // Check if the stream contains a video track
+                if (event.track.kind === "video") {
+                    console.log("Received remote video track");
+                    const videoEl = document.getElementById("videoCtl");
+                    videoEl.srcObject = event.streams[0];
+                }
+            };
+
+            // Add local audio track for microphone input in the browser
+            const ms = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+            //pc.addTrack(ms.getTracks()[0]);
+            ms.getTracks().forEach(track => pc.addTrack(track, ms));
+
+            // Set up data channel for sending and receiving events
+            const dc = pc.createDataChannel("oai-events");
+            dc.addEventListener("message", (e) => {
+                // Realtime server events appear here!
+                // console.log("Received event message:", e.data);
+            });
+
+            // Wait for the data channel to open before sending
+            dc.addEventListener("open", () => {
+                const updateSession = {
+                    type: "session.update",
+                    session: {
+                        instructions: instructions,
+                        voice: '龙婉',// https://api.xstar.city/v1/realtime/voiceList 查看完整音色列表
+                    }
+                }
+                dc.send(JSON.stringify(updateSession));
+
+                const welcomeText = "用户又上线了，请先退出同传翻译模式或外语模式（如果在的话），然后根据聊天历史打个招呼，或者提个问题，或者说点什么。";
+
+                // Generate a simple unique ID
+                const eventId = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+                const conversationItemCreate = {
+                    event_id: eventId,
+                    type: "conversation.item.create",
+                    item: {
+                        type: "message",
+                        role: "user", // Assuming this initial message should be from the 'user' perspective triggering the agent
+                        content: [
+                            {
+                                type: "input_text",
+                                text: welcomeText
+                            }
+                        ]
+                    }
+                };
+                console.log("Data channel open, sending conversation item create message.");
+                dc.send(JSON.stringify(conversationItemCreate));
+                const responseCreate = {
+                    event_id: eventId,
+                    type: "response.create"
+                };
+                dc.send(JSON.stringify(responseCreate));
+            });
+
+            // Start the session using the Session Description Protocol (SDP)
+            const offer = await pc.createOffer();
+            const patchedSdp = patchOpusSDP(offer.sdp);
+            await pc.setLocalDescription({ type: offer.type, sdp: patchedSdp });
+            console.log(`WebRTC: 创建 SDP offer\n：${patchedSdp}`);
+
+
+            const baseUrl = "https://api.xstar.city/v1/realtime";
+            const model = "doubao-1-5-lite-32k";
+            const sdpResponse = await fetch(`${baseUrl}?model=${model}&userId=tmp123`, {
+                method: "POST",
+                body: patchedSdp, // <-- send patchedSdp instead of offer.sdp
+                headers: {
+                    Authorization: `Bearer ${EPHEMERAL_KEY}`,
+                    "Content-Type": "application/sdp"
+                },
+            });
+
+            let sdpAnswer = await sdpResponse.text();
+            // --- Patch: Reorder answer SDP m-lines to match offer ---
+            sdpAnswer = reorderSdpMSections(patchedSdp, sdpAnswer);
+            console.log(`WebRTC: 收到 SDP answer\n：${sdpAnswer}`);
+            const answer = {
+                type: "answer",
+                sdp: sdpAnswer,
+            };
+            await pc.setRemoteDescription(answer);
+        }
+
+        function closeConnection() {
+            if (pc) {
+                pc.close();
+                pc = null;
+                console.log("PeerConnection closed.");
+            }
+        }
+
+        function patchOpusSDP(sdp) {
+            // 只保留单通道（stereo=0），采样率48000，开启DTX
+            return sdp.replace(
+                /(a=fmtp:111 [^\r\n]*)/g,
+                function (line) {
+                    // 移除已有的 maxplaybackrate、usedtx、stereo
+                    line = line.replace(/maxplaybackrate=\d+;?/g, '');
+                    line = line.replace(/usedtx=\d+;?/g, '');
+                    line = line.replace(/stereo=\d+;?/g, '');
+                    // 添加你需要的参数
+                    // 注意不要多加分号和换行
+                    if (!line.endsWith(';') && !line.endsWith(' ')) line += ';';
+                    return line + 'maxplaybackrate=48000;usedtx=1;stereo=0';
+                }
+            );
+        }
+        // Helper: Reorder m-lines in answer SDP to match offer SDP
+        function reorderSdpMSections(offerSdp, answerSdp) {
+            const getMLineTypes = (sdp) =>
+                sdp.split('\n').filter(line => line.startsWith('m=')).map(line => line.split(' ')[0] + line.split(' ')[1]);
+            const offerTypes = getMLineTypes(offerSdp);
+            const answerSections = answerSdp.split('\n').reduce((acc, line) => {
+                if (line.startsWith('m=')) acc.push([line]);
+                else if (acc.length) acc[acc.length - 1].push(line);
+                return acc;
+            }, []);
+            // Map type to section
+            const typeToSection = (sections) => {
+                const map = {};
+                for (const sec of sections) {
+                    const mType = sec[0].split(' ')[0] + sec[0].split(' ')[1];
+                    map[mType] = sec;
+                }
+                return map;
+            };
+            const answerMap = typeToSection(answerSections);
+            // Rebuild SDP with m-sections in offer order
+            const sdpLines = answerSdp.split('\n');
+            const headerLines = [];
+            for (const line of sdpLines) {
+                if (!line.startsWith('m=')) headerLines.push(line);
+                else break;
+            }
+            const orderedSections = offerTypes.map(type => answerMap[type]).filter(Boolean);
+            return [...headerLines, ...orderedSections.flat()].join('\n');
+        }
+
+        document.getElementById('startConnectionBtn').addEventListener('click', () => {
+            const key = document.getElementById('ephemeralKey').value.trim();
+            if (!key) {
+                alert('Please enter an ephemeral key.');
+                return;
+            }
+            init(key).catch(err => console.error("Error during init:", err));
+        });
+
+        document.getElementById('closeConnectionBtn').addEventListener('click', () => {
+            closeConnection();
+        });
+    </script>
+</body>
+</html>

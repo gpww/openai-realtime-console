@@ -1,18 +1,27 @@
 # xStar 实时语音调试客户端
 
-> OpenAI Realtime API 平替接口，支持定制agent、国内模型和自定义音色
+> OpenAI Realtime API 平替接口，支持定制agent、国内模型和自定义音色。支持低延迟、多模态交互，包括语音对话和实时转写。
+
+可以通过两种方式连接 xStar Realtime API：
+
+- 使用 WebRTC，适合客户端应用（如网页、嵌入式社保端）
+- 使用 WebSocket，适合服务端到服务端应用
 
 ## 概述
 
-本项目是一个用于调试和参考 xStar realtime API 的交互式网页工具，实现实时语音对话。它内置了两个工具库：
+本项目是一个用于调试和参考 xStar realtime API 的交互式网页工具，实现实时语音对话。
+
+👉 [WebRTC 纯JS极简示例代码（openai-webrtc-test）](./openai-webrtc-test.html)
+
+WebSocket版本内置了两个工具库：
 - [openai/openai-realtime-api-beta](https://github.com/gpww/openai-realtime-api-beta) —— 浏览器及 Node.js 用参考客户端
 - [`/src/lib/wavtools`](./src/lib/wavtools) —— 浏览器端音频操作工具
+
 
 ## 重要说明
 
 - 本仓库已将 https://github.com/gpww/openai-realtime-api-beta 添加为子模块，相比 OpenAI 原版，支持定制agent+国内模型+音色的自定义修改
-- 本仓库仅用于调试和参考，不适用于生产环境，浏览器兼容性（特别是手机端）可能存在问题
-- 本仓库的代码可能存在错误和问题，您使用本仓库的代码时，应自行承担风险
+- WebSocket版本的网页示例仅用于调试和参考，不适用于生产环境，浏览器兼容性（特别是手机端）可能存在问题
 
 ### 参考SDK
 
@@ -26,7 +35,18 @@
 
 内置 Demo Agent "幻星" 内置了多种功能插件，用于增强会话体验：
 
-1. **SpeechPlugin**: SpeechPlugin 插件提供了一系列语音合成功能，允许用户控制语音播放的各种参数。主要语义函数包括：
+1. **MemoryPlugin（长期记忆与短期记忆）**  
+   - **短期记忆**：每次用户上线时，agent 会自动恢复最近的聊天上下文，保证对话的连贯性。  
+   - **长期记忆**：agent 会尽量记住用户的以下类型信息，持续优化个性化体验：  
+     1. 个人偏好（食物、饮品、娱乐、艺术、音乐、品牌等喜好或厌恶）
+     2. 个人详情（姓名、关系、生日、纪念日等重要日期）
+     3. 计划和意图（即将发生的事件、旅行、目标和任何短期或长期计划）
+     4. 活动和服务习惯（就餐、旅行、购物、休闲习惯和偏好）
+     5. 健康信息（饮食限制、锻炼习惯、过敏、健康目标等）
+     6. 职业信息（职位、工作习惯、工作环境、职业目标等）
+     7. 兴趣爱好（书籍、电影、运动、收藏等个人兴趣）
+
+2. **SpeechPlugin**: SpeechPlugin 插件提供了一系列语音合成功能，允许用户控制语音播放的各种参数。主要语义函数包括：
    - **AdjustVoiceSpeed**：根据用户要求调整语速，比如说快点？慢点？
    - **SwitchVoice**：切换语音角色（当用户明确要求时）完整列表见 https://api.xstar.city/v1/realtime/voiceList
    - **CloneVoice**：交互式语音克隆，切换语音的时候不要调用语音克隆。一个用户只能克隆一个音色，保存为名字叫"克隆语音"的角色，再次克隆会覆盖之前的版本
@@ -34,23 +54,23 @@
    - **WebSearchMode**：上网/联网搜索来回答用户问题
    - **StartSimultaneousTranslation**：可启动进入语音同传翻译模式（当用户明确要求时），支持多语言间的实时翻译，并可以检测退出模式的请求
 
-2. **MusicPlugin**: 可以随机播放唱歌的歌曲，或者轻音乐。
+3. **MusicPlugin**: 可以随机播放唱歌的歌曲，或者轻音乐。
 
-3. **SoundGame**: 该插件可以让用户听到各种声音（请不要说播放声音，可以结合语境说得诗意一些）。内置2300+声音片段，主要包括人类声音、动物声音、物体声音、音乐声音和自然声音这五大类声音类型。其中人类声音包括人声、呼吸声等；动物声音涉及家养和野生动物；物体声音包括车辆、机械等人造物品的声音；音乐声音涵盖了乐器、音乐风格等；自然声音则包括风、雷、水等自然现象产生的声音。
+4. **SoundGame**: 该插件可以让用户听到各种声音（请不要说播放声音，可以结合语境说得诗意一些）。内置2300+声音片段，主要包括人类声音、动物声音、物体声音、音乐声音和自然声音这五大类声音类型。其中人类声音包括人声、呼吸声等；动物声音涉及家养和野生动物；物体声音包括车辆、机械等人造物品的声音；音乐声音涵盖了乐器、音乐风格等；自然声音则包括风、雷、水等自然现象产生的声音。
 
-4. **WeatherWatch**: 查询中国372个地区（包括州、省、市、县、特别行政区、盟、旗）和1011个市内区（例如：深圳市南山区）的天气。可查询当日实时天气情况，和未来3天的天气预报。数据来源是中国气象局。实况天气每小时更新多次，预报天气每天更新3次，分别在8、11、18点左右更新。
+5. **WeatherWatch**: 查询中国372个地区（包括州、省、市、县、特别行政区、盟、旗）和1011个市内区（例如：深圳市南山区）的天气。可查询当日实时天气情况，和未来3天的天气预报。数据来源是中国气象局。实况天气每小时更新多次，预报天气每天更新3次，分别在8、11、18点左右更新。
 
-5. **MathGamePlugin**: 这是一个数字游戏插件，经典的24点游戏也可以通过这个插件实现。给定最多6个整数，通过四则运算计算出目标值。插件可以找到所有可能的运算方法。解释运算方法的时候，请列出中间结果方便用户理解。例如解释 (5-(9/3))*12 = 24 的时候可以解释成：先用5-9/3=2，再用2*12=24。请不要输出Latex公式，也不要分点，这样会导致语音合成混乱。
+6. **MathGamePlugin**: 这是一个数字游戏插件，经典的24点游戏也可以通过这个插件实现。给定最多6个整数，通过四则运算计算出目标值。插件可以找到所有可能的运算方法。解释运算方法的时候，请列出中间结果方便用户理解。例如解释 (5-(9/3))*12 = 24 的时候可以解释成：先用5-9/3=2，再用2*12=24。请不要输出Latex公式，也不要分点，这样会导致语音合成混乱。
 
-6. **BrainTwister**: When you need to generate a riddle, please use the plugin to fetch it from the database instead of creating it yourself. However, when answering riddles posed by others, there is no need to call this plugin. Do not include the answer when you pose a riddle; provide it only if the user can't figure it out. Also, note that riddles do not have a single correct answer, so other reasonable answers are acceptable. Be aware that the input text comes from speech recognition, which may result in errors with words that have similar pronunciations. In such cases, answers with similar sounds are also correct. If it's an English riddle, please present it in its original English form WITHOUT translation.
+7. **BrainTwister**: When you need to generate a riddle, please use the plugin to fetch it from the database instead of creating it yourself. However, when answering riddles posed by others, there is no need to call this plugin. Do not include the answer when you pose a riddle; provide it only if the user can't figure it out. Also, note that riddles do not have a single correct answer, so other reasonable answers are acceptable. Be aware that the input text comes from speech recognition, which may result in errors with words that have similar pronunciations. In such cases, answers with similar sounds are also correct. If it's an English riddle, please present it in its original English form WITHOUT translation.
 
-7. **IdiomChain**: 在需要成语接龙语境下，请调用该插件（并不是所有场景下说成语都接龙，要根据上下文判断）。如果是你先说，请调用GetRandomIdiom。如果需要接续，请调用GetNextIdiom。如果接不上请参考函数返回提示。【4字成语大全】收录成语54,089个，剔除不可接或者被接的成语后，剩余46,464个成语。
+8. **IdiomChain**: 在需要成语接龙语境下，请调用该插件（并不是所有场景下说成语都接龙，要根据上下文判断）。如果是你先说，请调用GetRandomIdiom。如果需要接续，请调用GetNextIdiom。如果接不上请参考函数返回提示。【4字成语大全】收录成语54,089个，剔除不可接或者被接的成语后，剩余46,464个成语。
 
 ## 快速入门
 
 ### 安装
 
-该项目使用 create-react-app 搭建，并通过 Webpack 打包：
+WebSocket版本的网页示例使用 create-react-app 搭建，并通过 Webpack 打包：
 
 ```shell
 $ npm i
@@ -173,6 +193,7 @@ export const instructions = `agent_template={幻星}//这是agent模板名称
 - `Raw16KHz16BitMonoPcm`
 - `Raw44100Hz16BitMonoPcm`
 - `MonoMp3`
+- `Audio16KHz16BitMonoOpus`
 
 ### 消息发送与处理
 
