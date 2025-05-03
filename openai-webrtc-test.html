@@ -127,6 +127,12 @@
                 },
             });
 
+            if (sdpResponse.status !== 200) {
+                const errMsg = await sdpResponse.text();
+                alert("SDP 请求失败: " + errMsg);
+                return;
+            }
+
             let sdpAnswer = await sdpResponse.text();
             // --- Patch: Reorder answer SDP m-lines to match offer ---
             sdpAnswer = reorderSdpMSections(patchedSdp, sdpAnswer);
