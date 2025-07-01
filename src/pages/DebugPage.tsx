@@ -10,13 +10,13 @@
  */
 const REACT_APP_SERVER_URL: string =
   process.env.REACT_APP_SERVER_URL || '';
-const OPENAI_API_KEY: string = process.env.REACT_APP_OPENAI_API_KEY || '';
+const OPENAI_API_KEY: string = process.env.REACT_APP_Goodix_KEY || '';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 
 import { RealtimeClient } from 'realtime-api-beta-local';
 import type { ItemType } from 'realtime-api-beta-local/dist/lib/client.js';
-import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
+import { NativeAudioRecorder, NativeAudioPlayer } from '../lib/wavtools/nativeAudio.js'; // 替换为 nativeAudio
 import { WavRenderer } from '../utils/wav_renderer';
 import { instructions } from '../utils/conversation_config.js';
 
@@ -44,40 +44,24 @@ export function DebugPage() {
   const apiKey = REACT_APP_SERVER_URL
     ? OPENAI_API_KEY
     : localStorage.getItem('tmp::voice_api_key') ||
-      prompt('OpenAI API Key') ||
-      '';
+    prompt('OpenAI API Key') ||
+    '';
   if (apiKey !== '') {
     localStorage.setItem('tmp::voice_api_key', apiKey);
   }
 
   /**
    * Instantiate:
-   * - WavRecorder (speech input)
-   * - WavStreamPlayer (speech output)
+   * - NativeAudioRecorder (speech input with echo cancellation)
+   * - NativeAudioPlayer (speech output with better compatibility) 
    * - RealtimeClient (API client)
    */
-  const wavRecorderRef = useRef<WavRecorder>(
-    new WavRecorder({ sampleRate: 16000 })
+  const audioRecorderRef = useRef<NativeAudioRecorder>(
+    new NativeAudioRecorder({ recordingSampleRate: 16000, channels: 1 })
   );
-  const wavStreamPlayerRef = useRef<WavStreamPlayer>(
-    new WavStreamPlayer({ sampleRate: 16000 })
+  const audioPlayerRef = useRef<NativeAudioPlayer>(
+    new NativeAudioPlayer({ playbackSampleRate: 24000, channels: 1 })
   );
-  const audioContext = new window.AudioContext({ sampleRate: 16000 });
-  const isMp3 = false;
-  const decodeAudio = useCallback((arrayBuffer: Int16Array | Uint8Array) => {
-    return new Promise<AudioBuffer>((resolve, reject) => {
-      const buffer = arrayBuffer.buffer;
-      audioContext.decodeAudioData(buffer as ArrayBuffer)
-        .then(decodedData => {
-          resolve(decodedData);
-        })
-        .catch(error => {
-          console.error('Error decoding audio data:', error);
-          reject(error);
-        });
-    });
-  }, [audioContext]);
-
   const clientRef = useRef<RealtimeClient>(
     new RealtimeClient(
       {
@@ -188,12 +172,12 @@ export function DebugPage() {
 
   /**
    * Connect to conversation:
-   * WavRecorder taks speech input, WavStreamPlayer output, client is API client
+   * NativeAudioRecorder takes speech input, NativeAudioPlayer for output, client is API client
    */
   const connectConversation = useCallback(async () => {
     const client = clientRef.current;
-    const wavRecorder = wavRecorderRef.current;
-    const wavStreamPlayer = wavStreamPlayerRef.current;
+    const audioRecorder = audioRecorderRef.current;
+    const audioPlayer = audioPlayerRef.current;
 
     // Set state variables
     startTimeRef.current = new Date().toISOString();
@@ -203,7 +187,7 @@ export function DebugPage() {
 
     const userId = getUserId();
     // Connect to realtime API
-    await client.connect({ model: modelOptions[selectedModel], userId});
+    await client.connect({ model: modelOptions[selectedModel], userId });
 
     client.updateSession(
       {
@@ -211,26 +195,26 @@ export function DebugPage() {
         voice: '龙婉',
         // turn_detection: { type: 'server_vad' }
         input_audio_format: 'Raw16KHz16BitMonoPcm',
-        output_audio_format: 'Raw16KHz16BitMonoPcm',
+        output_audio_format: 'Raw24KHz16BitMonoPcm', // 更新为24kHz输出
       });
 
-      client.sendUserMessageContent([
-        {
-          type: "input_text",
-          text: "用户又上线了，请根据聊天历史打个招呼，或者提个问题，或者说点什么。",
-          // type: `tts_text`,
-          // text: `你来啦？`,
-        }
+    client.sendUserMessageContent([
+      {
+        type: "input_text",
+        text: "用户又上线了，请根据聊天历史打个招呼，或者提个问题，或者说点什么。",
+        // type: `tts_text`,
+        // text: `你来啦？`,
+      }
     ]);
 
-    // Connect to microphone
-    await wavRecorder.begin();
+    // Connect to microphone with echo cancellation
+    await audioRecorder.begin();
 
     // Connect to audio output
-    await wavStreamPlayer.connect();
+    await audioPlayer.connect();
 
     if (client.getTurnDetectionType() === 'server_vad') {
-      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+      await audioRecorder.record((data: { mono: Int16Array }) => client.appendInputAudio(data.mono));
     }
   }, [selectedModel]);
 
@@ -244,11 +228,11 @@ export function DebugPage() {
     const client = clientRef.current;
     client.disconnect();
 
-    const wavRecorder = wavRecorderRef.current;
-    await wavRecorder.end();
+    const audioRecorder = audioRecorderRef.current;
+    await audioRecorder.end();
 
-    const wavStreamPlayer = wavStreamPlayerRef.current;
-    await wavStreamPlayer.interrupt();
+    const audioPlayer = audioPlayerRef.current;
+    await audioPlayer.interrupt();
   }, []);
 
   const deleteConversationItem = useCallback(async (id: string) => {
@@ -263,16 +247,15 @@ export function DebugPage() {
   const startRecording = async () => {
     setIsRecording(true);
     const client = clientRef.current;
-    const wavRecorder = wavRecorderRef.current;
-    const wavStreamPlayer = wavStreamPlayerRef.current;
-    const trackSampleOffset = await wavStreamPlayer.interrupt();
+    const audioRecorder = audioRecorderRef.current;
+    const audioPlayer = audioPlayerRef.current;
+    await audioPlayer.interrupt();
 
-    if (trackSampleOffset?.trackId) {
-      const { trackId, offset } = trackSampleOffset;
-      await client.cancelResponse(trackId, offset);
-    }
-    if(!wavRecorder.recording)
-      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+    // 简化中断处理，不需要trackId
+    await client.cancelResponse();
+
+    if (!audioRecorder.recording)
+      await audioRecorder.record((data: { mono: Int16Array }) => client.appendInputAudio(data.mono));
   };
 
   /**
@@ -281,9 +264,9 @@ export function DebugPage() {
   const stopRecording = async () => {
     setIsRecording(false);
     const client = clientRef.current;
-    const wavRecorder = wavRecorderRef.current;
-    if(wavRecorder.recording)
-      await wavRecorder.pause();
+    const audioRecorder = audioRecorderRef.current;
+    if (audioRecorder.recording)
+      await audioRecorder.pause();
     client.createResponse();
   };
 
@@ -292,15 +275,15 @@ export function DebugPage() {
    */
   const changeTurnEndType = async (value: string) => {
     const client = clientRef.current;
-    const wavRecorder = wavRecorderRef.current;
-    if (value === 'none' && wavRecorder.getStatus() === 'recording') {
-      await wavRecorder.pause();
+    const audioRecorder = audioRecorderRef.current;
+    if (value === 'none' && audioRecorder.recording) {
+      await audioRecorder.pause();
     }
     client.updateSession({
       turn_detection: value === 'none' ? null : { type: 'server_vad' },
     });
     if (value === 'server_vad' && client.isConnected()) {
-      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+      await audioRecorder.record((data: { mono: Int16Array }) => client.appendInputAudio(data.mono));
     }
     setCanPushToTalk(value === 'none');
     canPushToTalkRef.current = value === 'none';
@@ -340,11 +323,11 @@ export function DebugPage() {
   useEffect(() => {
     let isLoaded = true;
 
-    const wavRecorder = wavRecorderRef.current;
+    const audioRecorder = audioRecorderRef.current;
     const clientCanvas = clientCanvasRef.current;
     let clientCtx: CanvasRenderingContext2D | null = null;
 
-    const wavStreamPlayer = wavStreamPlayerRef.current;
+    const audioPlayer = audioPlayerRef.current;
     const serverCanvas = serverCanvasRef.current;
     let serverCtx: CanvasRenderingContext2D | null = null;
 
@@ -358,8 +341,8 @@ export function DebugPage() {
           clientCtx = clientCtx || clientCanvas.getContext('2d');
           if (clientCtx) {
             clientCtx.clearRect(0, 0, clientCanvas.width, clientCanvas.height);
-            const result = wavRecorder.recording
-              ? wavRecorder.getFrequencies('voice')
+            const result = audioRecorder.recording
+              ? audioRecorder.getFrequencies('voice')
               : { values: new Float32Array([0]) };
             WavRenderer.drawBars(
               clientCanvas,
@@ -380,8 +363,8 @@ export function DebugPage() {
           serverCtx = serverCtx || serverCanvas.getContext('2d');
           if (serverCtx) {
             serverCtx.clearRect(0, 0, serverCanvas.width, serverCanvas.height);
-            const result = wavStreamPlayer.analyser
-              ? wavStreamPlayer.getFrequencies('voice')
+            const result = audioPlayer
+              ? audioPlayer.getFrequencies('voice')
               : { values: new Float32Array([0]) };
             WavRenderer.drawBars(
               serverCanvas,
@@ -410,78 +393,46 @@ export function DebugPage() {
    */
   useEffect(() => {
     // Get refs
-    const wavStreamPlayer = wavStreamPlayerRef.current;
-
-    wavStreamPlayer.onplay = async () => {
-      console.log('开始播放');
-      if(!canPushToTalkRef.current)
-      {
-        const wavRecorder = wavRecorderRef.current;
-        if(wavRecorder.recording)
-          await wavRecorder.pause();
-      }
-    };
-    wavStreamPlayer.onended = async () => {
-      console.log('播放结束');
-      if(!canPushToTalkRef.current)
-      {
-        const client = clientRef.current;
-        const wavRecorder = wavRecorderRef.current;
-          if(!wavRecorder.recording && isConnectedRef.current)
-          await wavRecorder.record((data) => client.appendInputAudio(data.mono))
-      }
-    };
+    const audioPlayer = audioPlayerRef.current;
     const client = clientRef.current;
 
     // handle realtime events from client + server for event logging
     client.on('realtime.event', (realtimeEvent: RealtimeEvent) => {
       setRealtimeEvents((realtimeEvents) => {
-      //   const lastEvent = realtimeEvents[realtimeEvents.length - 1];
-      //   if (lastEvent?.event.type === realtimeEvent.event.type) {
-      //     // if we receive multiple events in a row, aggregate them for display purposes
-      //     lastEvent.count = (lastEvent.count || 0) + 1;
-      //     return realtimeEvents.slice(0, -1).concat(lastEvent);
-      //   } else {
-      //     return realtimeEvents.concat(realtimeEvent);
-      //   }
-      return realtimeEvents.concat(realtimeEvent);
+        //   const lastEvent = realtimeEvents[realtimeEvents.length - 1];
+        //   if (lastEvent?.event.type === realtimeEvent.event.type) {
+        //     // if we receive multiple events in a row, aggregate them for display purposes
+        //     lastEvent.count = (lastEvent.count || 0) + 1;
+        //     return realtimeEvents.slice(0, -1).concat(lastEvent);
+        //   } else {
+        //     return realtimeEvents.concat(realtimeEvent);
+        //   }
+        return realtimeEvents.concat(realtimeEvent);
       });
     });
     client.on('error', (event: any) => console.error(event));
     client.on('conversation.interrupted', async () => {
-      const trackSampleOffset = await wavStreamPlayer.interrupt();
-      if (trackSampleOffset?.trackId) {
-        const { trackId, offset } = trackSampleOffset;
-        await client.cancelResponse(trackId, offset);
-      }
+      await audioPlayer.interrupt(); // 简化中断处理
+      await client.cancelResponse(); // 不需要trackId参数
     });
     client.on('conversation.updated', async ({ item, delta }: any) => {
       const items = client.conversation.getItems();
       if (delta?.audio) {
         let audioData = delta.audio;
-        if (isMp3) {
-          try {
-            const decodedBuffer = await decodeAudio(delta.audio);
-            audioData = decodedBuffer;
-            wavStreamPlayer.add16BitPCM(audioData, item.id);
-          } catch (error) {
-            console.error('Error in MP3 decoding:', error);
-          }
-        } else {
-          // 直接添加原始 PCM 数据
-          wavStreamPlayer.add16BitPCM(audioData, item.id);
-        }
+        // Native audio player handles Int16Array directly
+        audioPlayer.add16BitPCM(audioData, item.id);
       }
 
-      if (item.status === 'completed' && item.formatted.audio?.length) {
-        var sampleRate = item.role === 'user' ? 16000 : 16000;
-        const wavFile = await WavRecorder.decode(
-          item.formatted.audio,
-          sampleRate,
-          sampleRate
-        );
-        item.formatted.file = wavFile;
-      }
+      // 简化音频文件处理，移除 WavRecorder.decode
+      // if (item.status === 'completed' && item.formatted.audio?.length) {
+      //   var sampleRate = item.role === 'user' ? 16000 : 24000;
+      //   const wavFile = await WavRecorder.decode(
+      //     item.formatted.audio,
+      //     sampleRate,
+      //     sampleRate
+      //   );
+      //   item.formatted.file = wavFile;
+      // }
       setItems(items);
     });
 
@@ -505,20 +456,20 @@ export function DebugPage() {
           {/* <span>realtime console</span> */}
         </div>
         <div className="model-selector">
-            <label htmlFor="model-select">选择模型：</label>
-            <select
-              id="model-select"
-              value={selectedModel}
-              onChange={handleModelChange}
-              disabled={isConnected}
-            >
-              {modelNames.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <label htmlFor="model-select">选择模型：</label>
+          <select
+            id="model-select"
+            value={selectedModel}
+            onChange={handleModelChange}
+            disabled={isConnected}
+          >
+            {modelNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <div className="content-main">
         <div className="content-logs">
@@ -563,11 +514,10 @@ export function DebugPage() {
                         }}
                       >
                         <div
-                          className={`event-source ${
-                            event.type === 'error'
-                              ? 'error'
-                              : realtimeEvent.source
-                          }`}
+                          className={`event-source ${event.type === 'error'
+                            ? 'error'
+                            : realtimeEvent.source
+                            }`}
                         >
                           {realtimeEvent.source === 'client' ? (
                             <ArrowUp />
@@ -637,7 +587,7 @@ export function DebugPage() {
                               (conversationItem.formatted.audio?.length
                                 ? '(awaiting transcript)'
                                 : conversationItem.formatted.text ||
-                                  '(item sent)')}
+                                '(item sent)')}
                           </div>
                         )}
                       {!conversationItem.formatted.tool &&

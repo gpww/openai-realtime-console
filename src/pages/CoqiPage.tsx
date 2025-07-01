@@ -10,7 +10,7 @@
  */
 const REACT_APP_SERVER_URL: string =
   process.env.REACT_APP_SERVER_URL || '';
-const OPENAI_API_KEY: string = process.env.REACT_APP_OPENAI_API_KEY || '';
+const OPENAI_API_KEY: string = process.env.REACT_APP_Coqi_KEY || '';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 

@@ -10,18 +10,18 @@
  */
 const REACT_APP_SERVER_URL: string =
   process.env.REACT_APP_SERVER_URL || '';
-const OPENAI_API_KEY: string = process.env.REACT_APP_OPENAI_API_KEY || '';
+const OPENAI_API_KEY: string = process.env.REACT_APP_Goodix_KEY || '';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 
 import { RealtimeClient } from 'realtime-api-beta-local';
 import { ItemType, AudioFormatType } from 'realtime-api-beta-local/dist/lib/client.js';
-import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
+import { NativeAudioRecorder, NativeAudioPlayer } from '../lib/wavtools/nativeAudio.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
 
-import { X, Edit, Zap, ArrowUp, ArrowDown,Phone } from 'react-feather';
-import { FaMicrophone, FaMicrophoneSlash} from 'react-icons/fa';
+import { X, Edit, Zap, ArrowUp, ArrowDown, Phone } from 'react-feather';
+import { FaMicrophone, FaMicrophoneSlash } from 'react-icons/fa';
 import { Button } from '../components/button/Button';
 
 import './ConsolePage.scss';
@@ -63,42 +63,24 @@ export function ConsolePage() {
   const apiKey = REACT_APP_SERVER_URL
     ? OPENAI_API_KEY
     : localStorage.getItem('tmp::voice_api_key') ||
-      prompt('OpenAI API Key') ||
-      '';
+    prompt('OpenAI API Key') ||
+    '';
   if (apiKey !== '') {
     localStorage.setItem('tmp::voice_api_key', apiKey);
   }
 
   /**
    * Instantiate:
-   * - WavRecorder (speech input)
-   * - WavStreamPlayer (speech output)
+   * - NativeAudioRecorder (speech input with echo cancellation)
+   * - NativeAudioPlayer (speech output with better compatibility)
    * - RealtimeClient (API client)
    */
-  const wavRecorderRef = useRef<WavRecorder>(
-    new WavRecorder({ sampleRate: 16000 })
+  const audioRecorderRef = useRef<NativeAudioRecorder>(
+    new NativeAudioRecorder({ recordingSampleRate: 16000, channels: 1 }) // 明确指定录制采样率
   );
-  const wavStreamPlayerRef = useRef<WavStreamPlayer>(
-    new WavStreamPlayer({ sampleRate: 16000 })
+  const audioPlayerRef = useRef<NativeAudioPlayer>(
+    new NativeAudioPlayer({ playbackSampleRate: 24000, channels: 1 }) // 明确指定播放采样率
   );
-  const audioContext = new window.AudioContext({ sampleRate: 16000 });
-  const isMp3 = false;
-  const isOpus = false; // Add flag to check if we're using Opus format
-
-  const decodeAudio = useCallback((arrayBuffer: Int16Array | Uint8Array) => {
-    return new Promise<AudioBuffer>((resolve, reject) => {
-      // Get the underlying ArrayBuffer regardless of the input type
-      const buffer = arrayBuffer.buffer;
-      audioContext.decodeAudioData(buffer as ArrayBuffer)
-        .then(decodedData => {
-          resolve(decodedData);
-        })
-        .catch(error => {
-          console.error('Error decoding audio data:', error);
-          reject(error);
-        });
-    });
-  }, [audioContext]);
 
   const clientRef = useRef<RealtimeClient>(
     new RealtimeClient(
@@ -113,7 +95,7 @@ export function ConsolePage() {
   /**
    * References for
    * - Rendering audio visualization (canvas)
-   * - Autoscrolling event logs
+   * - Auto Scrolling event logs
    * - Timing delta for event log displays
    */
   const clientCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -146,39 +128,6 @@ export function ConsolePage() {
     isMutedRef.current = isMuted;
   }, [isMuted]);
 
-  /**
-   * Utility for formatting the timing of logs
-   */
-  const formatTime = useCallback((timestamp: string) => {
-    const startTime = startTimeRef.current;
-    const t0 = new Date(startTime).valueOf();
-    const t1 = new Date(timestamp).valueOf();
-    const delta = t1 - t0;
-    const hs = Math.floor(delta / 10) % 100;
-    const s = Math.floor(delta / 1000) % 60;
-    const m = Math.floor(delta / 60_000) % 60;
-    const pad = (n: number) => {
-      let s = n + '';
-      while (s.length < 2) {
-        s = '0' + s;
-      }
-      return s;
-    };
-    return `${pad(m)}:${pad(s)}.${pad(hs)}`;
-  }, []);
-
-  /**
-   * When you click the API key
-   */
-  const resetAPIKey = useCallback(() => {
-    const apiKey = prompt('OpenAI API Key');
-    if (apiKey !== null) {
-      localStorage.clear();
-      localStorage.setItem('tmp::voice_api_key', apiKey);
-      window.location.reload();
-    }
-  }, []);
-
   const getUserId = () => {
     let userId = localStorage.getItem('userId');
     if (!userId) {
@@ -190,13 +139,13 @@ export function ConsolePage() {
 
   /**
    * Connect to conversation:
-   * WavRecorder taks speech input, WavStreamPlayer output, client is API client
+   * NativeAudioRecorder takes speech input, NativeAudioPlayer for output, client is API client
    */
   const connectConversation = useCallback(async () => {
     setIsConnecting(true);
     const client = clientRef.current;
-    const wavRecorder = wavRecorderRef.current;
-    const wavStreamPlayer = wavStreamPlayerRef.current;
+    const audioRecorder = audioRecorderRef.current;
+    const audioPlayer = audioPlayerRef.current;
 
     // Set state variables
     startTimeRef.current = new Date().toISOString();
@@ -205,7 +154,7 @@ export function ConsolePage() {
 
     const userId = getUserId();
     // Connect to realtime API
-    await client.connect({ model: modelOptions[selectedModel], userId});
+    await client.connect({ model: modelOptions[selectedModel], userId });
 
     client.updateSession(
       {
@@ -213,26 +162,27 @@ export function ConsolePage() {
         voice: '龙婉',// https://api.xstar.city/v1/realtime/voiceList 查看完整音色列表
         turn_detection: { type: 'server_vad' },//不写的话默认按压模式(server_vad = None)
         input_audio_format: 'Raw16KHz16BitMonoPcm',//不写的话默认这个
-        output_audio_format: 'Raw16KHz16BitMonoPcm',//不写的话默认这个
+        output_audio_format: 'Raw24KHz16BitMonoPcm',//不写的话默认这个
         // output_audio_format: 'MonoMp3',//网页端解码mp3会卡顿
       });
 
     client.sendUserMessageContent([
       {
         type: "input_text",//正常发送文本
-        // type: "tts_text",//直接回复语音，不通过大模型
         text: "用户又上线了，请根据聊天历史打个招呼，或者提个问题，或者说点什么。",
+        // type: "tts_text",//直接回复语音，不通过大模型
+        // text: "电量不足，请充及时充电",
       },
     ]);
 
-    // Connect to microphone
-    await wavRecorder.begin();
+    // Connect to microphone with echo cancellation
+    await audioRecorder.begin();
 
     // Connect to audio output
-    await wavStreamPlayer.connect();
+    await audioPlayer.connect();
 
-    if(!isMutedRef.current)
-      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+    if (!isMutedRef.current)
+      await audioRecorder.record((data: { mono: Int16Array }) => client.appendInputAudio(data.mono));
 
   }, [selectedModel]);
 
@@ -247,27 +197,27 @@ export function ConsolePage() {
     const client = clientRef.current;
     client.disconnect();
 
-    const wavRecorder = wavRecorderRef.current;
-    await wavRecorder.end();
+    const audioRecorder = audioRecorderRef.current;
+    await audioRecorder.end();
 
-    const wavStreamPlayer = wavStreamPlayerRef.current;
-    await wavStreamPlayer.interrupt();
-    setIsMuted(false);//取消静音
+    const audioPlayer = audioPlayerRef.current;
+    await audioPlayer.interrupt();
+    setIsMuted(false);
   }, []);
 
   const toggleMute = useCallback(async () => {
-    if(!isMutedRef.current){
-      const wavRecorder = wavRecorderRef.current;
-      if(wavRecorder.recording)
-        await wavRecorder.pause();
+    if (!isMutedRef.current) {
+      const audioRecorder = audioRecorderRef.current;
+      if (audioRecorder.recording)
+        await audioRecorder.pause();
     }
-    else{
+    else {
       const client = clientRef.current;
-      const wavRecorder = wavRecorderRef.current;
-      if(!wavRecorder.recording)
-        await wavRecorder.record((data) => client.appendInputAudio(data.mono))
+      const audioRecorder = audioRecorderRef.current;
+      if (!audioRecorder.recording)
+        await audioRecorder.record((data: { mono: Int16Array }) => client.appendInputAudio(data.mono))
     }
-    setIsMuted(!isMutedRef.current); // 更新状态
+    setIsMuted(!isMutedRef.current);
   }, []);
 
   const deleteConversationItem = useCallback(async (id: string) => {
@@ -294,11 +244,11 @@ export function ConsolePage() {
   useEffect(() => {
     let isLoaded = true;
 
-    const wavRecorder = wavRecorderRef.current;
+    const audioRecorder = audioRecorderRef.current;
     const clientCanvas = clientCanvasRef.current;
     let clientCtx: CanvasRenderingContext2D | null = null;
 
-    const wavStreamPlayer = wavStreamPlayerRef.current;
+    const audioPlayer = audioPlayerRef.current;
     const serverCanvas = serverCanvasRef.current;
     let serverCtx: CanvasRenderingContext2D | null = null;
 
@@ -312,8 +262,8 @@ export function ConsolePage() {
           clientCtx = clientCtx || clientCanvas.getContext('2d');
           if (clientCtx) {
             clientCtx.clearRect(0, 0, clientCanvas.width, clientCanvas.height);
-            const result = wavRecorder.recording
-              ? wavRecorder.getFrequencies('voice')
+            const result = audioRecorder.recording
+              ? audioRecorder.getFrequencies('voice')
               : { values: new Float32Array([0]) };
             WavRenderer.drawBars(
               clientCanvas,
@@ -334,8 +284,8 @@ export function ConsolePage() {
           serverCtx = serverCtx || serverCanvas.getContext('2d');
           if (serverCtx) {
             serverCtx.clearRect(0, 0, serverCanvas.width, serverCanvas.height);
-            const result = wavStreamPlayer.analyser
-              ? wavStreamPlayer.getFrequencies('voice')
+            const result = audioPlayer
+              ? audioPlayer.getFrequencies('voice')
               : { values: new Float32Array([0]) };
             WavRenderer.drawBars(
               serverCanvas,
@@ -358,18 +308,16 @@ export function ConsolePage() {
     };
   }, []);
 
-    /**
-     * 在播报中，用户点击中断按钮，停止播放并取消请求
+  /**
+   * 在播报中，用户点击中断按钮，停止播放并取消请求
    */
-    const interrupt = async () => {
-      const client = clientRef.current;
-      const wavStreamPlayer = wavStreamPlayerRef.current;
-      const trackSampleOffset = await wavStreamPlayer.interrupt();
-      if (trackSampleOffset?.trackId) {
-        const { trackId, offset } = trackSampleOffset;
-        await client.cancelResponse(trackId, offset);
-      }
-    };
+  const interrupt = async () => {
+    const client = clientRef.current;
+    const audioPlayer = audioPlayerRef.current;
+    await audioPlayer.interrupt();
+    // 由于原生音频播放器不使用trackId，直接取消所有响应
+    await client.cancelResponse();
+  };
 
   /**
    * Core RealtimeClient and audio capture setup
@@ -377,62 +325,35 @@ export function ConsolePage() {
    */
   useEffect(() => {
     // Get refs
-    const wavStreamPlayer = wavStreamPlayerRef.current;
-    wavStreamPlayer.onplay = async () => {
-      // console.log('开始播放');
-      {
-        setIsConnecting(false);
-        await wavStreamPlayer.interrupt();//播放前先停止之前的播放
-        // isBotSpeaking.current = true;
-        setIsBotSpeaking(true);
-        const wavRecorder = wavRecorderRef.current;
-        if(wavRecorder.recording)
-          await wavRecorder.pause();
-      }
+    const audioPlayer = audioPlayerRef.current;
+    audioPlayer.onplay = async () => {
+      setIsConnecting(false);
+      setIsBotSpeaking(true);
     };
-    wavStreamPlayer.onended = async () => {
-        // isBotSpeaking.current = false;
-        setIsBotSpeaking(false);
-        if(!isMutedRef.current){
-          const client = clientRef.current;
-          const wavRecorder = wavRecorderRef.current;
-          if(!wavRecorder.recording && isConnectedRef.current)
-            await wavRecorder.record((data) => client.appendInputAudio(data.mono))
-        }
+    audioPlayer.onended = async () => {
+      setIsBotSpeaking(false);
     };
     const client = clientRef.current;
 
     client.on('error', (event: any) => console.error(event));
     client.on('conversation.interrupted', async () => {
-      const trackSampleOffset = await wavStreamPlayer.interrupt();
-      if (trackSampleOffset?.trackId) {
-        const { trackId, offset } = trackSampleOffset;
-        await client.cancelResponse(trackId, offset);
-      }
+      await audioPlayer.interrupt();
+      // 简化中断处理，不需要trackId
+      await client.cancelResponse();
     });
     client.on('conversation.updated', async ({ item, delta }: any) => {
       setIsConnecting(false);
       const items = client.conversation.getItems();
       if (delta?.audio) {
         let audioData = delta.audio;
-        if (isMp3 || isOpus) {
-          // Use the generic decoder for both MP3 and Opus formats
-          audioData = await decodeAudio(delta.audio);
-        }
-        wavStreamPlayer.add16BitPCM(audioData, item.id);
+        // Native audio player handles Int16Array directly
+        audioPlayer.add16BitPCM(audioData, item.id);
       }
-      if (item.status === 'completed' && item.formatted.audio?.length) {
-        var sampleRate = item.role === 'user' ? 16000 : 16000;
-        const wavFile = await WavRecorder.decode(
-          item.formatted.audio,
-          sampleRate,
-          sampleRate
-        );
-      item.formatted.file = wavFile;
       // if (item.status === 'completed' && item.formatted.audio?.length) {
-      //   const autoFile = new Blob([item.formatted.audio], { type: 'audio/mp3' });
-      //   item.formatted.file = URL.createObjectURL(autoFile);
-      }
+      //   // Create a simple blob URL for the audio file display
+      //   const audioBlob = new Blob([item.formatted.audio.buffer], { type: 'audio/wav' });
+      //   item.formatted.file = { url: URL.createObjectURL(audioBlob) };
+      // }
       setItems(items);
     });
 
@@ -456,20 +377,20 @@ export function ConsolePage() {
           {/* <span>实时语音</span> */}
         </div>
         <div className="model-selector">
-            <label htmlFor="model-select">选择模型：</label>
-            <select
-              id="model-select"
-              value={selectedModel}
-              onChange={handleModelChange}
-              disabled={isConnected}
-            >
-              {modelNames.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <label htmlFor="model-select">选择模型：</label>
+          <select
+            id="model-select"
+            value={selectedModel}
+            onChange={handleModelChange}
+            disabled={isConnected}
+          >
+            {modelNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
         {/* <div className="content-api-key">
           {(
             <Button
@@ -531,9 +452,9 @@ export function ConsolePage() {
                           <div>
                             {conversationItem.formatted.transcript ||
                               (conversationItem.formatted.audio?.length
-                                ? '(awaiting transcript)'
+                                ? '(转录中...)'
                                 : conversationItem.formatted.text ||
-                                  '(item sent)')}
+                                '(item sent)')}
                           </div>
                         )}
                       {!conversationItem.formatted.tool &&
@@ -544,12 +465,6 @@ export function ConsolePage() {
                               '数据接收中...'}
                           </div>
                         )}
-                      {conversationItem.formatted.file && (
-                        <audio
-                          src={conversationItem.formatted.file.url}
-                          controls
-                        />
-                      )}
                     </div>
                   </div>
                 );
@@ -559,18 +474,18 @@ export function ConsolePage() {
           <div className="content-actions">
             {isConnected && (
               <Button
-                icon={isMuted ? FaMicrophoneSlash : FaMicrophone }
+                icon={isMuted ? FaMicrophoneSlash : FaMicrophone}
                 buttonStyle='regular'
-                onClick= {toggleMute}
+                onClick={toggleMute}
               />
             )}
             <div className="spacer" />
             {isConnected && isBotSpeaking && (
-                <Button
-                  label='打断'
-                  buttonStyle='regular'
-                  onClick={interrupt}
-                />
+              <Button
+                label='打断'
+                buttonStyle='regular'
+                onClick={interrupt}
+              />
             )}
             <div className="spacer" />
             <Button

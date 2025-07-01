@@ -1,11 +1,16 @@
-# xStar 实时语音调试客户端
+# xStar 实时语音Agent
 
-> OpenAI Realtime API 平替接口，支持定制agent、国内模型和自定义音色。支持低延迟、多模态交互，包括语音对话和实时转写。
+> OpenAI Realtime API 平替接口 https://api.xstar.city/ 支持定制agent、国内llm 和 自定义音色。
+> 支持低延迟、多模态交互：包括语音对话、实时转写和语音合成。
+> 支持自由打断（非唤醒词），连续语音打断（检测到用户连续说话）和语义打断（通过语义判断用户表达的意思是否请求打断）。
+> 支持交互式语音克隆：直接说出“克隆我的声音”，即可将当前语音克隆为新的音色，支持多次克隆覆盖。
+> 支持多国语言角色切换和同传翻译模式
+> 支持多模态RAG和知识图谱，Agent短期，长期记忆
 
 可以通过两种方式连接 xStar Realtime API：
 
-- 使用 WebRTC，适合客户端应用（如网页、嵌入式社保端）
-- 使用 WebSocket，适合服务端到服务端应用
+- 使用 WebRTC，适用于客户端应用（如网页、嵌入式端），Demo: http://v.xstar.city/ 和 http://talk.xstar.city/
+- 使用 WebSocket，适用于服务端到服务端应用，Demo：https://chat.xstar.city/
 
 ## 概述
 
@@ -15,13 +20,13 @@
 
 WebSocket版本内置了两个工具库：
 - [openai/openai-realtime-api-beta](https://github.com/gpww/openai-realtime-api-beta) —— 浏览器及 Node.js 用参考客户端
-- [`/src/lib/wavtools`](./src/lib/wavtools) —— 浏览器端音频操作工具
+- [`/src/lib/wavtools/nativeAudio.js`](./src/lib/wavtools/nativeAudio.js) —— 浏览器端原生音频操作工具（替换OpenAI原版wavtools以解决兼容性问题）
 
 
 ## 重要说明
 
 - 本仓库已将 https://github.com/gpww/openai-realtime-api-beta 添加为子模块，相比 OpenAI 原版，支持定制agent+国内模型+音色的自定义修改
-- WebSocket版本的网页示例仅用于调试和参考，不适用于生产环境，浏览器兼容性（特别是手机端）可能存在问题
+- 网页示例仅用于调试和参考
 
 ### 参考SDK
 
@@ -80,7 +85,7 @@ $ npm i
 
 1. 将 `.env.example` 复制为 `.env`  
 2. 在 `.env` 中填入 `REACT_APP_OPENAI_API_KEY`
-   > API Key 可在 https://www.xstar.city/rag/ 获取
+   > API Key 联系xstar获取
 
 ### 启动
 
@@ -155,7 +160,7 @@ client.updateSession({
   voice: '龙婉', // 语音名称，完整列表见 https://api.xstar.city/v1/realtime/voiceList
   turn_detection: { type: 'server_vad' }, // 语音活动检测（默认按语音片段识别）
   input_audio_format: 'Raw16KHz16BitMonoPcm', // 用户输入语音格式
-  output_audio_format: 'Raw8KHz16BitMonoPcm', // 输出语音格式
+  output_audio_format: 'Raw24KHz16BitMonoPcm', // 输出语音格式
   // output_audio_format: 'MonoMp3', // 备用格式（部分浏览器解码 MP3 可能延迟）
 });
 ```
@@ -168,7 +173,7 @@ client.updateSession({
 export const instructions = `agent_template={幻星}//这是agent模板名称
 
     bot_info={
-        你是小奇奇，一位聪慧可爱的知心好玩伴。
+        你是幻星，一位聪慧可爱的知心好玩伴。
     }//助手信息，包含助手的角色、性格、身份等
     
     user_info={
@@ -191,6 +196,7 @@ export const instructions = `agent_template={幻星}//这是agent模板名称
 
 - `Raw8KHz16BitMonoPcm`
 - `Raw16KHz16BitMonoPcm`
+- `Raw24KHz16BitMonoPcm` // 添加24kHz格式
 - `Raw44100Hz16BitMonoPcm`
 - `MonoMp3`
 - `Audio16KHz16BitMonoOpus`
@@ -227,8 +233,8 @@ client.appendInputAudio(data);
 client.createResponse();
 
 // 取消服务器正在生成的回复，并截断后续生成内容
-const trackSampleOffset = await wavStreamPlayer.interrupt();
-await client.cancelResponse(trackSampleOffset.trackId, trackSampleOffset.offset);
+await audioPlayer.interrupt(); // 修正为使用nativeAudio的interrupt方法
+await client.cancelResponse(); // 简化调用，不需要trackId参数
 
 // 删除指定的对话消息
 client.deleteItem(itemId);
@@ -279,69 +285,74 @@ const { item } = await client.waitForNextCompletedItem();
 
 ## 音频工具库
 
-### WavRecorder（录音器）
+> **重要说明**：由于OpenAI原版的wavtools在某些浏览器和移动设备上存在兼容性问题，我们已替换为基于Web Audio API的原生音频处理库`nativeAudio.js`，提供更好的兼容性和性能。
 
-用于采集用户麦克风语音。
+### NativeAudioRecorder（录音器）
+
+用于采集用户麦克风语音，支持回声消除。
 
 ```javascript
-import { WavRecorder } from '/src/lib/wavtools/index.js';
+import { NativeAudioRecorder } from '/src/lib/wavtools/nativeAudio.js';
 
-const wavRecorder = new WavRecorder({ sampleRate: 16000 });
+const audioRecorder = new NativeAudioRecorder({ 
+  recordingSampleRate: 16000, 
+  channels: 1 
+});
 
-// 请求权限并连接麦克风
-await wavRecorder.begin();
+// 请求权限并连接麦克风（内置回声消除）
+await audioRecorder.begin();
 
-// 开始录音，回调函数中返回音频数据（mono，raw 均为 Int16Array）
-await wavRecorder.record((data) => {
-  const { mono, raw } = data;
+// 开始录音，回调函数中返回音频数据（mono为Int16Array）
+await audioRecorder.record((data) => {
+  const { mono } = data;
   client.appendInputAudio(mono);
 });
 
 // 暂停录音
-await wavRecorder.pause();
-
-// 保存录音文件（输出 WAV 格式）
-const audio = await wavRecorder.save();
-
-// 清理缓冲区并重新录音
-await wavRecorder.clear();
-await wavRecorder.record();
+await audioRecorder.pause();
 
 // 获取频谱数据（用于可视化）
-const frequencyData = wavRecorder.getFrequencies();
+const frequencyData = audioRecorder.getFrequencies();
 
-// 停止录音并断开麦克风连接
-const finalAudio = await wavRecorder.end();
+// 检查录音状态
+const isRecording = audioRecorder.recording;
 
-// 监听设备变动（例如麦克风断线）
-wavRecorder.listenForDeviceChange((deviceList) => {
-  // 处理设备变化
-});
+// 停止录音并释放资源
+await audioRecorder.end();
 ```
 
-### WavStreamPlayer（播放器）
+### NativeAudioPlayer（播放器）
 
-用于播放 AI 生成的语音。
+用于播放AI生成的语音，支持流式播放。
 
 ```javascript
-import { WavStreamPlayer } from '/src/lib/wavtools/index.js';
+import { NativeAudioPlayer } from '/src/lib/wavtools/nativeAudio.js';
 
-const wavStreamPlayer = new WavStreamPlayer({ sampleRate: 8000 });
+const audioPlayer = new NativeAudioPlayer({ 
+  playbackSampleRate: 24000, 
+  channels: 1 
+});
 
 // 连接音频输出设备
-await wavStreamPlayer.connect();
+await audioPlayer.connect();
 
 // 添加音频数据到队列（会立即开始播放）
-wavStreamPlayer.add16BitPCM(audioData, 'track-id');
+audioPlayer.add16BitPCM(audioData, 'track-id');
 
 // 获取频谱数据（用于可视化）
-const frequencyData = wavStreamPlayer.getFrequencies();
+const frequencyData = audioPlayer.getFrequencies();
 
-// 中断当前播放（返回中断位置等信息）
-const trackOffset = await wavStreamPlayer.interrupt();
-// trackOffset.trackId：中断的音轨ID
-// trackOffset.offset：中断位置（采样点数）
-// trackOffset.currentTime：中断时的音轨时间
+// 中断当前播放
+await audioPlayer.interrupt();
+
+// 设置播放事件回调
+audioPlayer.onplay = () => {
+  console.log('开始播放');
+};
+
+audioPlayer.onended = () => {
+  console.log('播放结束');
+};
 ```
 
 ## 完整示例
@@ -350,55 +361,40 @@ const trackOffset = await wavStreamPlayer.interrupt();
 
 ```javascript
 import { RealtimeClient } from 'realtime-api-beta-local';
-import { WavRecorder, WavStreamPlayer } from './lib/wavtools/index.js';
+import { NativeAudioRecorder, NativeAudioPlayer } from './lib/wavtools/nativeAudio.js';
 
-// 初始化各组件
-const wavRecorder = new WavRecorder({ sampleRate: 16000 });
-const wavStreamPlayer = new WavStreamPlayer({ sampleRate: 8000 });
+// 初始化各组件（注意录制和播放使用不同采样率）
+const audioRecorder = new NativeAudioRecorder({ recordingSampleRate: 16000, channels: 1 });
+const audioPlayer = new NativeAudioPlayer({ playbackSampleRate: 24000, channels: 1 });
 const client = new RealtimeClient({
   apiKey: apiKey,
   url: 'wss://api.xstar.city/v1/raltime',
   dangerouslyAllowAPIKeyInBrowser: true,
 });
 
-// 播放器事件设置：AI 播放时暂停录音，播放完毕后恢复
-wavStreamPlayer.onplay = async () => {
+// 播放器事件设置：显示播放状态
+audioPlayer.onplay = async () => {
   setIsBotSpeaking(true);
-  if(wavRecorder.recording) {
-    await wavRecorder.pause();
-  }
 };
 
-wavStreamPlayer.onended = async () => {
+audioPlayer.onended = async () => {
   setIsBotSpeaking(false);
-  if(!wavRecorder.recording && isConnectedRef.current)
-    await wavRecorder.record((data) => client.appendInputAudio(data.mono));
 };
 
 // 客户端事件处理
 client.on('error', (event) => console.error(event));
 
 client.on('conversation.interrupted', async () => {
-  const trackSampleOffset = await wavStreamPlayer.interrupt();
-  if (trackSampleOffset?.trackId) {
-    await client.cancelResponse(trackSampleOffset.trackId, trackSampleOffset.offset);
-  }
+  await audioPlayer.interrupt();
+  await client.cancelResponse();
 });
 
 client.on('conversation.updated', async ({ item, delta }) => {
   if (delta?.audio) {
-    wavStreamPlayer.add16BitPCM(delta.audio, item.id);
+    // nativeAudio直接处理Int16Array音频数据
+    audioPlayer.add16BitPCM(delta.audio, item.id);
   }
   
-  if (item.status === 'completed' && item.formatted.audio?.length) {
-    const sampleRate = item.role === 'user' ? 16000 : 8000;
-    const wavFile = await WavRecorder.decode(
-      item.formatted.audio,
-      sampleRate,
-      sampleRate
-    );
-    item.formatted.file = wavFile;
-  }
   // 根据最新对话内容更新 UI
   setItems(client.conversation.getItems());
 });
@@ -412,25 +408,35 @@ async function connectConversation() {
     voice: '龙婉',
     turn_detection: { type: 'server_vad' },
     input_audio_format: 'Raw16KHz16BitMonoPcm',
-    output_audio_format: 'Raw8KHz16BitMonoPcm',
+    output_audio_format: 'Raw24KHz16BitMonoPcm', // 播放采样率可以设置为24kHz
   });
   
   client.sendUserMessageContent([{
     type: "input_text",
+    // type: "tts_text", // 如果需要直接语音合成，可以使用这个类型
     text: "你好呀",
   }]);
   
   // 连接音频设备
-  await wavRecorder.begin();
-  await wavStreamPlayer.connect();
+  await audioRecorder.begin();
+  await audioPlayer.connect();
   
   // 开始采集录音
-  await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+  await audioRecorder.record((data) => client.appendInputAudio(data.mono));
 }
 
 // 结束对话：断开连接并释放资源
 async function disconnectConversation() {
   client.disconnect();
-  await wavRecorder.end();
-  await wavStreamPlayer.interrupt();
+  await audioRecorder.end();
+  await audioPlayer.interrupt();
 }
+```
+
+### nativeAudio vs 原版wavtools的主要改进
+
+1. **更好的兼容性**：基于标准Web Audio API，支持更多浏览器和移动设备
+2. **内置回声消除**：录音器自动启用回声消除，提供更清晰的语音输入
+3. **分离采样率配置**：支持录制和播放使用不同采样率（16kHz录制，24kHz播放）
+4. **简化的API**：移除了复杂的音频解码和文件处理，专注于实时音频流
+5. **更好的性能**：使用AudioWorklet处理音频，减少主线程阻塞
