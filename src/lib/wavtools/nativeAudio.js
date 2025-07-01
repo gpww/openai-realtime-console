@@ -6,7 +6,7 @@ const AUDIO_PROCESSOR_CODE = `
 class AudioRecorderProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.frameSize = 960; // 60ms @ 16kHz
+    this.frameSize = 3200; // 200ms @ 16kHz
     this.buffer = new Int16Array(this.frameSize);
     this.bufferIndex = 0;
     this.isRecording = false;
@@ -75,7 +75,7 @@ export class NativeAudioRecorder {
     constructor(options = {}) {
         this.sampleRate = options.recordingSampleRate || options.sampleRate || 16000; // 确保支持两种参数名
         this.channels = options.channels || 1;
-        this.frameSize = options.frameSize || 960; // 60ms @ 16kHz
+        this.frameSize = options.frameSize || 3200; // 200ms @ 16kHz
 
         this.audioContext = null;
         this.mediaStream = null;
@@ -286,7 +286,7 @@ export class NativeAudioRecorder {
  */
 export class NativeAudioPlayer {
     constructor(options = {}) {
-        this.sampleRate = options.playbackSampleRate || options.sampleRate || 24000; // 确保支持两种参数名
+        this.sampleRate = options.playbackSampleRate || options.sampleRate || 24000;
         this.channels = options.channels || 1;
 
         this.audioContext = null;
@@ -296,6 +296,7 @@ export class NativeAudioPlayer {
         this.currentSource = null;
         this.onPlayCallback = null;
         this.onEndedCallback = null;
+        this.nextAudioTimer = null; // 添加定时器引用
     }
 
     async connect() {
@@ -362,9 +363,9 @@ export class NativeAudioPlayer {
             this.currentSource = this.audioContext.createBufferSource();
             this.currentSource.buffer = buffer;
 
-            // Create gain node for smooth transitions
+            // 减少淡入淡出时间以减少音频间隙感
             const gainNode = this.audioContext.createGain();
-            const fadeDuration = 0.01; // 10ms fade
+            const fadeDuration = 0.002; // 减少到2ms
 
             gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
             gainNode.gain.linearRampToValueAtTime(1, this.audioContext.currentTime + fadeDuration);
@@ -381,13 +382,24 @@ export class NativeAudioPlayer {
 
             this.currentSource.onended = () => {
                 this.currentSource = null;
-                // 立即播放下一个音频片段，不延迟
-                // 使用 requestAnimationFrame 确保在下一个渲染帧执行，但没有固定延迟
+
+                // 清除可能存在的定时器
+                if (this.nextAudioTimer) {
+                    clearTimeout(this.nextAudioTimer);
+                    this.nextAudioTimer = null;
+                }
+
+                // 立即检查并播放下一个音频
                 if (this.audioQueue.length > 0) {
-                    requestAnimationFrame(() => this.playNext());
+                    // 使用 setTimeout(0) 确保在下一个事件循环中执行，避免阻塞
+                    this.nextAudioTimer = setTimeout(() => {
+                        this.nextAudioTimer = null;
+                        this.playNext();
+                    }, 0);
                 } else {
-                    // 如果队列为空，等待短暂时间看是否有新数据到达
-                    setTimeout(() => {
+                    // 缩短等待时间，提高响应性
+                    this.nextAudioTimer = setTimeout(() => {
+                        this.nextAudioTimer = null;
                         if (this.audioQueue.length > 0) {
                             this.playNext();
                         } else {
@@ -396,7 +408,7 @@ export class NativeAudioPlayer {
                                 this.onEndedCallback();
                             }
                         }
-                    }, 5); // 减少到5ms的最小延迟
+                    }, 1); // 减少到1ms
                 }
             };
 
@@ -404,12 +416,24 @@ export class NativeAudioPlayer {
 
         } catch (error) {
             console.error('Failed to play audio:', error);
-            // Continue with next in queue with minimal delay
-            requestAnimationFrame(() => this.playNext());
+            // 发生错误时也要立即尝试下一个
+            if (this.nextAudioTimer) {
+                clearTimeout(this.nextAudioTimer);
+            }
+            this.nextAudioTimer = setTimeout(() => {
+                this.nextAudioTimer = null;
+                this.playNext();
+            }, 0);
         }
     }
 
     async interrupt() {
+        // 清除定时器避免继续播放
+        if (this.nextAudioTimer) {
+            clearTimeout(this.nextAudioTimer);
+            this.nextAudioTimer = null;
+        }
+
         if (this.currentSource) {
             try {
                 this.currentSource.stop();
