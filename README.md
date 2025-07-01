@@ -1,16 +1,19 @@
 # xStar 实时语音Agent
 
-> OpenAI Realtime API 平替接口 https://api.xstar.city/ 支持定制agent、国内llm 和 自定义音色。
-> 支持低延迟、多模态交互：包括语音对话、实时转写和语音合成。
-> 支持自由打断（非唤醒词），连续语音打断（检测到用户连续说话）和语义打断（通过语义判断用户表达的意思是否请求打断）。
+> OpenAI Realtime API 平替接口 https://api.xstar.city/ 支持定制agent、国内 llm 和 自定义音色。
+> 支持流式低延迟、多模态交互：包括语音对话、实时转写、语音合成。
+> 支持自由打断（非唤醒词），连续语音打断（检测到用户连续说话）和 语义打断（通过语义判断用户表达的意思是否请求打断）。
 > 支持交互式语音克隆：直接说出“克隆我的声音”，即可将当前语音克隆为新的音色，支持多次克隆覆盖。
-> 支持多国语言角色切换和同传翻译模式
-> 支持多模态RAG和知识图谱，Agent短期，长期记忆
+> 支持 多国语言/方言 角色切换 + 同传翻译模式
+> 支持多模态RAG和知识图谱，知识库、Agent短期/长期记忆
+> 支持联网搜索模式 和 深度思考模式
 
 可以通过两种方式连接 xStar Realtime API：
 
 - 使用 WebRTC，适用于客户端应用（如网页、嵌入式端），Demo: http://v.xstar.city/ 和 http://talk.xstar.city/
 - 使用 WebSocket，适用于服务端到服务端应用，Demo：https://chat.xstar.city/
+
+开源UI+开发文档：https://github.com/gpww/openai-realtime-console/
 
 ## 概述
 
@@ -85,7 +88,7 @@ $ npm i
 
 1. 将 `.env.example` 复制为 `.env`  
 2. 在 `.env` 中填入 `REACT_APP_OPENAI_API_KEY`
-   > API Key 联系xstar获取
+   > API Key 联系 xstar 或 关注 幻星之城 微信公众号 获取
 
 ### 启动
 
